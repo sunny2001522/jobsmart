@@ -12,6 +12,7 @@ import {
   Heart,
   Settings,
   LogOut,
+  Search,
 } from "lucide-react";
 import {
   Sidebar,
@@ -57,6 +58,11 @@ const mainNavItems = [
 ];
 
 const toolNavItems = [
+  {
+    title: "JD 分析",
+    href: "/jd-analyzer",
+    icon: Search,
+  },
   {
     title: "面試準備",
     href: "/interview",
