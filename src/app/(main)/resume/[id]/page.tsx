@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, use, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ResumeEditor } from "@/components/resume-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Save, Download, Sparkles, FileText } from "lucide-react";
+import { ArrowLeft, Save, Download, Sparkles, FileText, Loader2 } from "lucide-react";
 
 interface ResumeEditPageProps {
   params: Promise<{ id: string }>;
@@ -21,10 +21,18 @@ export default function ResumeEditPage({ params }: ResumeEditPageProps) {
   const [title, setTitle] = useState(isNew ? "我的履歷" : "軟體工程師履歷");
   const [content, setContent] = useState<Record<string, unknown>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [atsScore] = useState<number | null>(isNew ? null : 78);
-  const [keywords] = useState<string[]>(
+  const [isExporting, setIsExporting] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [atsScore, setAtsScore] = useState<number | null>(isNew ? null : 78);
+  const [keywords, setKeywords] = useState<string[]>(
     isNew ? [] : ["React", "TypeScript", "Next.js", "Node.js"]
   );
+  const contentRef = useRef<Record<string, unknown>>({});
+
+  const handleContentChange = useCallback((newContent: Record<string, unknown>) => {
+    setContent(newContent);
+    contentRef.current = newContent;
+  }, []);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -33,14 +41,83 @@ export default function ResumeEditPage({ params }: ResumeEditPageProps) {
     setIsSaving(false);
   };
 
-  const handleExportPDF = () => {
-    // TODO: Implement PDF export using Puppeteer
-    alert("PDF 匯出功能開發中...");
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      const exportContent = Object.keys(contentRef.current).length > 0
+        ? contentRef.current
+        : content;
+
+      const response = await fetch("/api/resume/export-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: exportContent,
+          title,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("匯出失敗");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("PDF export error:", error);
+      alert("PDF 匯出失敗，請稍後再試");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  const handleOptimize = () => {
-    // TODO: Call AI optimization API
-    alert("AI 優化功能開發中...");
+  const handleOptimize = async () => {
+    setIsOptimizing(true);
+    try {
+      const exportContent = Object.keys(contentRef.current).length > 0
+        ? contentRef.current
+        : content;
+
+      // 將 TipTap JSON 轉換為純文字
+      const extractText = (node: Record<string, unknown>): string => {
+        if (node.text) return node.text as string;
+        if (node.content && Array.isArray(node.content)) {
+          return node.content.map(extractText).join("");
+        }
+        return "";
+      };
+      const plainText = extractText(exportContent);
+
+      const response = await fetch("/api/resume/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: plainText,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setAtsScore(data.data.atsScore);
+        setKeywords(data.data.keywords);
+        alert(`優化建議：\n${data.data.suggestions.join("\n")}`);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error("Optimize error:", error);
+      alert("AI 優化失敗，請稍後再試");
+    } finally {
+      setIsOptimizing(false);
+    }
   };
 
   return (
@@ -64,13 +141,21 @@ export default function ResumeEditPage({ params }: ResumeEditPageProps) {
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleOptimize}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            AI 優化
+          <Button variant="outline" onClick={handleOptimize} disabled={isOptimizing}>
+            {isOptimizing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-2" />
+            )}
+            {isOptimizing ? "分析中..." : "AI 優化"}
           </Button>
-          <Button variant="outline" onClick={handleExportPDF}>
-            <Download className="h-4 w-4 mr-2" />
-            匯出 PDF
+          <Button variant="outline" onClick={handleExportPDF} disabled={isExporting}>
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            {isExporting ? "匯出中..." : "匯出 PDF"}
           </Button>
           <Button onClick={handleSave} disabled={isSaving}>
             <Save className="h-4 w-4 mr-2" />
@@ -81,7 +166,7 @@ export default function ResumeEditPage({ params }: ResumeEditPageProps) {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
         {/* Editor */}
-        <ResumeEditor content={content} onChange={setContent} />
+        <ResumeEditor content={content} onChange={handleContentChange} />
 
         {/* Sidebar */}
         <div className="space-y-4">
