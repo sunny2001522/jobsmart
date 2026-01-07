@@ -1,20 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Plus,
   FileText,
-  Building2,
   Mic,
   Target,
   TrendingUp,
   Calendar,
-  CheckCircle,
   Clock,
   Send,
   Users,
@@ -23,31 +20,11 @@ import {
   Sparkles,
   Search,
 } from "lucide-react";
-
-// 模擬數據 - 之後會從 Supabase 取得
-const mockStats = {
-  totalApplications: 12,
-  wishlist: 3,
-  applied: 5,
-  interviews: 3,
-  offers: 1,
-  rejected: 0,
-};
-
-const mockRecentActivity = [
-  { id: 1, type: "applied", company: "Google", position: "Frontend Engineer", date: "2025-01-07" },
-  { id: 2, type: "interview", company: "Meta", position: "Software Engineer", date: "2025-01-06" },
-  { id: 3, type: "added", company: "Apple", position: "iOS Developer", date: "2025-01-05" },
-  { id: 4, type: "offer", company: "Microsoft", position: "Full Stack Developer", date: "2025-01-04" },
-];
-
-const weeklyGoals = {
-  applications: { current: 5, target: 10 },
-  interviews: { current: 2, target: 3 },
-  practice: { current: 3, target: 5 },
-};
+import { useDashboard } from "@/hooks/use-dashboard";
 
 export default function DashboardPage() {
+  const { stats, recentActivity, weeklyGoals, responseRate, isLoading } = useDashboard();
+
   const getActivityIcon = (type: string) => {
     switch (type) {
       case "applied":
@@ -74,6 +51,14 @@ export default function DashboardPage() {
     }
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("zh-TW", {
+      month: "2-digit",
+      day: "2-digit",
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -97,10 +82,16 @@ export default function DashboardPage() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStats.totalApplications}</div>
-            <p className="text-xs text-muted-foreground">
-              {mockStats.wishlist} 想投 · {mockStats.applied} 已投
-            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{stats.totalApplications}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.wishlist} 想投 · {stats.applied} 已投
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -110,10 +101,16 @@ export default function DashboardPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStats.interviews}</div>
-            <p className="text-xs text-muted-foreground">
-              等待或進行中的面試
-            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{stats.interviews}</div>
+                <p className="text-xs text-muted-foreground">
+                  等待或進行中的面試
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -123,10 +120,16 @@ export default function DashboardPage() {
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{mockStats.offers}</div>
-            <p className="text-xs text-muted-foreground">
-              口頭或書面 Offer
-            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-green-600">{stats.offers}</div>
+                <p className="text-xs text-muted-foreground">
+                  口頭或書面 Offer
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -136,14 +139,16 @@ export default function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockStats.applied > 0
-                ? Math.round(((mockStats.interviews + mockStats.offers) / mockStats.applied) * 100)
-                : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">
-              面試/申請比例
-            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{responseRate}%</div>
+                <p className="text-xs text-muted-foreground">
+                  面試/申請比例
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -207,9 +212,22 @@ export default function DashboardPage() {
             <CardDescription>你最近的求職記錄</CardDescription>
           </CardHeader>
           <CardContent>
-            {mockRecentActivity.length > 0 ? (
+            {isLoading ? (
               <div className="space-y-4">
-                {mockRecentActivity.map((activity) => (
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-32 mb-1" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                ))}
+              </div>
+            ) : recentActivity.length > 0 ? (
+              <div className="space-y-4">
+                {recentActivity.map((activity) => (
                   <div key={activity.id} className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
                       {getActivityIcon(activity.type)}
@@ -220,7 +238,7 @@ export default function DashboardPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">{activity.position}</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">{activity.date}</span>
+                    <span className="text-xs text-muted-foreground">{formatDate(activity.date)}</span>
                   </div>
                 ))}
               </div>
@@ -228,6 +246,7 @@ export default function DashboardPage() {
               <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
                 <Calendar className="h-8 w-8 mb-2" />
                 <p className="text-sm">還沒有任何活動</p>
+                <p className="text-xs mt-1">開始追蹤你的求職進度吧！</p>
               </div>
             )}
           </CardContent>
