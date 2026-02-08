@@ -90,7 +90,7 @@ export interface Company {
 export interface CompanyReview {
   id: string;
   company_id: string;
-  source: 'dcard' | 'medium' | 'qollie' | 'manual';
+  source: 'dcard' | 'medium' | 'qollie' | 'ptt' | 'manual';
   source_url: string | null;
   title: string | null;
   content: string;
@@ -100,6 +100,26 @@ export interface CompanyReview {
   published_at: string | null;
   scraped_at: string;
   created_at: string;
+}
+
+// 薪資週期
+export type SalaryPeriod = 'hourly' | 'monthly' | 'yearly';
+
+export const SALARY_PERIOD_LABELS: Record<SalaryPeriod, string> = {
+  hourly: '時薪',
+  monthly: '月薪',
+  yearly: '年薪',
+};
+
+// JD 中文翻譯內容
+export interface JDContentZh {
+  summary: string;           // 職缺摘要（2-3句話）
+  summary_tags?: string[];   // 工作摘要標籤（3-5個，如：前端(React)、建資料庫）
+  requirements: string[];    // 中文職位要求
+  responsibilities: string[]; // 中文工作職責
+  benefits: string[];        // 中文福利待遇
+  keywords_zh: string[];     // 中文關鍵字
+  translated_at: string;     // ISO timestamp
 }
 
 // 求職追蹤 (對應 job_applications 資料表)
@@ -112,6 +132,7 @@ export interface JobApplication {
   position: string;
   jd_url: string | null;
   jd_content: Record<string, unknown> | null;
+  jd_content_zh: JDContentZh | null;  // 中文翻譯摘要
   jd_keywords: string[];
   status: ApplicationStatus;
   rating_happiness: number | null;
@@ -121,6 +142,22 @@ export interface JobApplication {
   notes: string | null;
   display_order: number;
   applied_at: string | null;
+  // 薪資資訊
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string;
+  salary_period: SalaryPeriod;
+  benefits: string[];
+  // 實領薪水計算相關
+  work_location: string | null;
+  commute_cost: number;
+  rent_estimate: number | null;
+  meal_allowance: number;
+  other_allowance: number;
+  // 20 因素評分
+  value_scores: JobValueScores | null;
+  // 職位類別
+  category_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -256,4 +293,214 @@ export interface DBValueCard {
   name: string;
   description: string | null;
   category: ValueCardCategory | null;
+}
+
+// ============================================
+// 履歷版本管理相關類型
+// ============================================
+
+// 客製化履歷生成狀態
+export type GenerationStatus = 'pending' | 'generating' | 'completed' | 'failed';
+
+export const GENERATION_STATUS_LABELS: Record<GenerationStatus, string> = {
+  pending: '待生成',
+  generating: '生成中',
+  completed: '已完成',
+  failed: '生成失敗',
+};
+
+// 履歷版本 (對應 resume_versions 資料表)
+export interface ResumeVersion {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  target_role: string | null;
+  base_content: Record<string, unknown>;  // TipTap JSON
+  base_plain_text: string | null;
+  base_ats_score: number | null;
+  base_keywords: string[];
+  is_active: boolean;
+  display_order: number;
+  category_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// 版本-工作-客製化履歷關聯 (對應 version_job_resumes 資料表)
+export interface VersionJobResume {
+  id: string;
+  version_id: string;
+  job_application_id: string;
+  customized_content: Record<string, unknown> | null;
+  customized_plain_text: string | null;
+  generation_status: GenerationStatus;
+  generated_at: string | null;
+  ats_score: number | null;
+  matched_keywords: string[];
+  missing_keywords: string[];
+  ai_suggestions: {
+    suggestions?: string[];
+    strongVerbs?: string[];
+    improvements?: string[];
+  } | null;
+  display_order: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// 帶關聯工作數據的版本類型
+export interface ResumeVersionWithJobs extends ResumeVersion {
+  version_job_resumes: (VersionJobResume & {
+    job_application: JobApplication;
+  })[];
+  job_count: number;
+  completed_count: number;
+}
+
+// 帶版本信息的客製化履歷
+export interface VersionJobResumeWithDetails extends VersionJobResume {
+  job_application: JobApplication;
+  resume_version?: ResumeVersion;
+}
+
+// ============================================
+// 20 因素評分系統
+// ============================================
+
+// 單一因素的評分
+export interface ValueScore {
+  score: number | null;  // 0-10，null 表示無法計算
+  source: 'jd' | 'reviews' | 'both' | 'user' | 'default';
+  confidence: 'high' | 'medium' | 'low' | 'none';
+  reasoning?: string;  // 評分依據
+}
+
+// 職缺的價值觀評分（存儲在 job_applications.value_scores）
+export interface JobValueScores {
+  status: 'not_calculated' | 'calculating' | 'calculated' | 'failed';
+  calculatedAt: string | null;
+  scores: Record<string, ValueScore>;  // 20 個因素的評分
+  weightedScore: number | null;  // 加權總分 0-10
+  rankingSnapshot: string[] | null;  // 計算時使用的用戶排序快照
+}
+
+// 因素元數據
+export interface FactorMetadata {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string;
+  primarySource: 'jd' | 'reviews' | 'calculated' | 'user';
+  settingRequired?: {
+    type: string;
+    label: string;
+    path: string;
+  };
+}
+
+// 加權分數計算結果
+export interface WeightedScoreResult {
+  score: number;  // 0-10
+  calculatedCount: number;  // 有分數的因素數
+  defaultedCount: number;  // 使用預設值的因素數
+}
+
+// ============================================
+// 職位類別系統
+// ============================================
+
+// 職位類別 (對應 job_categories 資料表)
+export interface JobCategory {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// 類別統計數據
+export interface CategoryStats {
+  category_id: string;
+  category_name: string;
+  category_color: string;
+  total: number;
+  wishlist: number;
+  applied: number;
+  interviews: number;
+  offers: number;
+}
+
+export type JobCategoryInsert = Omit<JobCategory, 'id' | 'created_at' | 'updated_at'>;
+export type JobCategoryUpdate = Partial<Omit<JobCategory, 'id' | 'user_id' | 'created_at'>> & { id: string };
+
+// ============================================
+// 面試經驗搜尋系統
+// ============================================
+
+// 面試來源
+export type InterviewSource = 'dcard' | 'ptt' | 'qollie' | 'medium';
+
+// 面試關卡
+export interface InterviewStage {
+  order: number;
+  name: string;        // e.g., "電話面試", "技術面", "HR面"
+  description?: string;
+}
+
+// 面試經驗 (對應 interview_experiences 資料表)
+export interface InterviewExperience {
+  id: string;
+  company_id: string | null;
+  company_name: string;
+  source: InterviewSource;
+  source_url: string | null;
+  title: string | null;
+  content: string;
+  position: string | null;
+
+  // AI 提取欄位
+  stages: InterviewStage[];
+  questions: string[];
+  difficulty: 'easy' | 'medium' | 'hard' | null;
+  outcome: 'offer' | 'rejected' | 'ghosted' | 'unknown' | null;
+  tips: string[];
+
+  // 情緒分析
+  sentiment: 'positive' | 'neutral' | 'negative' | null;
+  sentiment_score: number | null;
+
+  // 元資料
+  author: string | null;
+  published_at: string | null;
+  scraped_at: string;
+  created_at: string;
+}
+
+// 面試搜尋結果的來源統計
+export interface InterviewSourceResult {
+  success: boolean;
+  count: number;
+  error?: string;
+}
+
+// 面試資料彙整
+export interface InterviewAggregated {
+  commonStages: InterviewStage[];
+  commonQuestions: string[];
+  difficultyDistribution: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
+  outcomeDistribution: {
+    offer: number;
+    rejected: number;
+    ghosted: number;
+    unknown: number;
+  };
 }
