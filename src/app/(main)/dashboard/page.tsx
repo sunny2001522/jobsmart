@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CategoryProgressCard } from "@/components/dashboard/category-progress-card";
 import {
   Plus,
   FileText,
@@ -18,7 +19,6 @@ import {
   Award,
   ArrowRight,
   Sparkles,
-  Search,
 } from "lucide-react";
 import { useDashboard } from "@/hooks/use-dashboard";
 
@@ -152,6 +152,9 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 類別進度統計 */}
+      <CategoryProgressCard />
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* 每週目標 */}
@@ -290,23 +293,6 @@ export default function DashboardPage() {
         </Card>
 
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <Link href="/jd-analyzer">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
-                  <Search className="h-5 w-5" />
-                </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <h3 className="font-medium">JD 分析</h3>
-              <p className="text-sm text-muted-foreground">分析職缺關鍵字</p>
-            </CardContent>
-          </Link>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
           <Link href="/interview">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -343,7 +329,7 @@ export default function DashboardPage() {
               <Link href="/linkedin">LinkedIn 生成</Link>
             </Button>
             <Button size="sm" asChild>
-              <Link href="/jd-analyzer">開始分析</Link>
+              <Link href="/interview">面試練習</Link>
             </Button>
           </div>
         </CardContent>

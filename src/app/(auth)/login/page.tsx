@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -19,6 +19,29 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // 開發環境自動登入
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV === "development" &&
+      process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_EMAIL &&
+      process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_PASSWORD
+    ) {
+      const autoLogin = async () => {
+        const supabase = createClient();
+        const { error } = await supabase.auth.signInWithPassword({
+          email: process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_EMAIL!,
+          password: process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_PASSWORD!,
+        });
+
+        if (!error) {
+          router.push(redirectTo);
+          router.refresh();
+        }
+      };
+      autoLogin();
+    }
+  }, [router, redirectTo]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
