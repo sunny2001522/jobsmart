@@ -21,6 +21,7 @@ export function ResumeEditor({
   placeholder = "開始撰寫你的履歷...",
 }: ResumeEditorProps) {
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: {
