@@ -374,6 +374,7 @@ export type JobApplicationSourceType =
   | "threads"
   | "facebook"
   | "linkedin"
+  | "line"
   | "other_social";
 
 // 擴展的 JobApplication（包含新的 source 欄位）
@@ -398,4 +399,79 @@ export interface ProfileExtended extends Profile {
   gmail_connected?: boolean;
   gmail_email?: string | null;
   webhook_settings?: WebhookSettings;
+}
+
+// ============================================
+// LINE 整合相關類型
+// ============================================
+
+// LINE 用戶綁定
+export interface LineUserBinding {
+  id: string;
+  user_id: string;
+  line_user_id: string;
+  display_name: string | null;
+  picture_url: string | null;
+  is_active: boolean;
+  notification_enabled: boolean;
+  linked_at: string;
+  last_interaction_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// LINE 用戶綁定 Insert 類型
+export type LineUserBindingInsert = Omit<
+  LineUserBinding,
+  "id" | "created_at" | "updated_at" | "linked_at"
+>;
+
+// LINE 用戶綁定 Update 類型
+export type LineUserBindingUpdate = Partial<
+  Omit<LineUserBinding, "id" | "user_id" | "line_user_id" | "created_at">
+>;
+
+// LINE 通知類型
+export type LineNotificationType =
+  | "job_added"
+  | "processing_complete"
+  | "processing_failed"
+  | "binding_success"
+  | "binding_required";
+
+// LINE 通知 Payload
+export interface LineNotificationPayload {
+  type: LineNotificationType;
+  title: string;
+  body: string;
+  data?: {
+    jobApplicationId?: string;
+    companyName?: string;
+    position?: string;
+    atsScore?: number;
+    viewUrl?: string;
+    gmailUrl?: string;
+    error?: string;
+  };
+}
+
+// 任務佇列相關類型
+export type JobQueueStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed";
+
+export interface ProcessJobPayload {
+  jobId: string;
+  userId: string;
+  lineUserId: string;
+  url: string;
+  content?: string;
+  options: {
+    autoCustomize: boolean;
+    autoCompanyReview: boolean;
+    autoDraftEmail: boolean;
+  };
+  createdAt: string;
 }
