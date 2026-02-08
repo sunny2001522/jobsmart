@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { proxyFetch } from "./proxy-fetch";
 
 export interface DcardPost {
   id: string;
@@ -31,7 +32,7 @@ export async function searchDcardPosts(
       companyName
     )}&forum=${forum}&limit=${limit}`;
 
-    const response = await fetch(searchUrl, {
+    const response = await proxyFetch(searchUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
@@ -71,7 +72,7 @@ export async function getDcardPostDetail(postId: string): Promise<DcardPost | nu
   try {
     const postUrl = `${DCARD_API_BASE}/posts/${postId}`;
 
-    const response = await fetch(postUrl, {
+    const response = await proxyFetch(postUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
@@ -108,7 +109,7 @@ export async function scrapeDcardPage(url: string): Promise<{
   content: string;
 } | null> {
   try {
-    const response = await fetch(url, {
+    const response = await proxyFetch(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",

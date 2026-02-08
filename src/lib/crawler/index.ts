@@ -1,9 +1,15 @@
 import { searchDcardPosts, type DcardPost } from "./dcard";
+import { searchQollie, qollieToReview } from "./qollie";
+import { searchPTTWithContent, pttToReview } from "./ptt";
+import { searchMediumArticles, mediumToReview } from "./google-search";
 import { aiGateway } from "../ai/gateway";
+import { CrawlerError, type CrawlerErrorCode } from "./proxy-fetch";
+
+export type ReviewSource = "dcard" | "medium" | "qollie" | "ptt";
 
 export interface CompanyReview {
   id: string;
-  source: "dcard" | "medium" | "qollie" | "manual";
+  source: ReviewSource | "manual";
   sourceUrl: string;
   title: string;
   content: string;
@@ -15,37 +21,142 @@ export interface CompanyReview {
   scrapedAt: string;
 }
 
+export interface SourceResult {
+  success: boolean;
+  count: number;
+  error?: {
+    code: CrawlerErrorCode;
+    message: string;
+  };
+}
+
+export interface CrawlResult {
+  reviews: CompanyReview[];
+  sourceResults: Record<ReviewSource, SourceResult>;
+}
+
 // 從多個來源爬取公司評論
 export async function crawlCompanyReviews(
   companyName: string,
   options?: {
-    sources?: Array<"dcard" | "medium" | "qollie">;
+    sources?: ReviewSource[];
     limit?: number;
     analyzeSentiment?: boolean;
   }
-): Promise<CompanyReview[]> {
+): Promise<CrawlResult> {
   const {
-    sources = ["dcard"],
+    sources = ["dcard", "qollie", "ptt"],
     limit = 10,
     analyzeSentiment = true,
   } = options ?? {};
 
   const allReviews: CompanyReview[] = [];
+  const sourceResults: Record<ReviewSource, SourceResult> = {
+    dcard: { success: false, count: 0 },
+    qollie: { success: false, count: 0 },
+    ptt: { success: false, count: 0 },
+    medium: { success: false, count: 0 },
+  };
+
+  // 並行爬取所有來源
+  const crawlPromises: Promise<void>[] = [];
 
   // Dcard 爬取
   if (sources.includes("dcard")) {
-    const dcardPosts = await searchDcardPosts(companyName, { limit });
-    const dcardReviews = dcardPosts.map(postToReview);
-    allReviews.push(...dcardReviews);
+    crawlPromises.push(
+      (async () => {
+        try {
+          const dcardPosts = await searchDcardPosts(companyName, { limit });
+          const dcardReviews = dcardPosts.map(postToReview);
+          allReviews.push(...dcardReviews);
+          sourceResults.dcard = { success: true, count: dcardReviews.length };
+        } catch (error) {
+          sourceResults.dcard = {
+            success: false,
+            count: 0,
+            error: extractErrorInfo(error),
+          };
+        }
+      })()
+    );
   }
+
+  // Qollie 爬取
+  if (sources.includes("qollie")) {
+    crawlPromises.push(
+      (async () => {
+        try {
+          const qolliePosts = await searchQollie(companyName, { limit });
+          const qollieReviews = qolliePosts.map(qollieToReview);
+          allReviews.push(...qollieReviews);
+          sourceResults.qollie = { success: true, count: qollieReviews.length };
+        } catch (error) {
+          sourceResults.qollie = {
+            success: false,
+            count: 0,
+            error: extractErrorInfo(error),
+          };
+        }
+      })()
+    );
+  }
+
+  // PTT 爬取
+  if (sources.includes("ptt")) {
+    crawlPromises.push(
+      (async () => {
+        try {
+          const pttPosts = await searchPTTWithContent(companyName, {
+            limit,
+            fetchContent: true,
+          });
+          const pttReviews = pttPosts.map(pttToReview);
+          allReviews.push(...pttReviews);
+          sourceResults.ptt = { success: true, count: pttReviews.length };
+        } catch (error) {
+          sourceResults.ptt = {
+            success: false,
+            count: 0,
+            error: extractErrorInfo(error),
+          };
+        }
+      })()
+    );
+  }
+
+  // Medium 爬取 (透過 Google Search)
+  if (sources.includes("medium")) {
+    crawlPromises.push(
+      (async () => {
+        try {
+          const mediumArticles = await searchMediumArticles(companyName, { limit });
+          const mediumReviews = mediumArticles.map(mediumToReview);
+          allReviews.push(...mediumReviews);
+          sourceResults.medium = { success: true, count: mediumReviews.length };
+        } catch (error) {
+          sourceResults.medium = {
+            success: false,
+            count: 0,
+            error: extractErrorInfo(error),
+          };
+        }
+      })()
+    );
+  }
+
+  // 等待所有爬取完成
+  await Promise.all(crawlPromises);
 
   // 情緒分析
+  let finalReviews = allReviews;
   if (analyzeSentiment && allReviews.length > 0) {
-    const analyzedReviews = await analyzeReviewsSentiment(allReviews);
-    return analyzedReviews;
+    finalReviews = await analyzeReviewsSentiment(allReviews);
   }
 
-  return allReviews;
+  return {
+    reviews: finalReviews,
+    sourceResults,
+  };
 }
 
 // 將 Dcard 貼文轉換為評論格式
@@ -129,4 +240,45 @@ export function calculateCompanyRatings(reviews: CompanyReview[]): {
   };
 }
 
+// 提取錯誤資訊
+function extractErrorInfo(error: unknown): {
+  code: CrawlerErrorCode;
+  message: string;
+} {
+  if (error instanceof CrawlerError) {
+    return {
+      code: error.code,
+      message: error.message,
+    };
+  }
+
+  if (error instanceof Error) {
+    // Try to detect error type from message
+    const message = error.message.toLowerCase();
+
+    if (message.includes("timeout") || message.includes("abort")) {
+      return { code: "TIMEOUT", message: error.message };
+    }
+    if (message.includes("econnreset") || message.includes("network")) {
+      return { code: "NETWORK_ERROR", message: error.message };
+    }
+    if (message.includes("403") || message.includes("forbidden")) {
+      return { code: "ACCESS_DENIED", message: error.message };
+    }
+    if (message.includes("429") || message.includes("rate")) {
+      return { code: "RATE_LIMITED", message: error.message };
+    }
+
+    return { code: "UNKNOWN", message: error.message };
+  }
+
+  return { code: "UNKNOWN", message: "Unknown error" };
+}
+
 export { searchDcardPosts, type DcardPost };
+
+// 面試經驗爬蟲
+export {
+  crawlInterviewExperiences,
+  type InterviewCrawlResult,
+} from "./interview";
