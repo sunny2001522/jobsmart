@@ -1,7 +1,8 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { Plus } from "lucide-react";
 import { ApplicationCard } from "./application-card";
 import { cn } from "@/lib/utils";
 import type { JobApplication, ApplicationStatus } from "@/types";
@@ -10,9 +11,14 @@ interface KanbanColumnProps {
   id: ApplicationStatus;
   title: string;
   applications: JobApplication[];
+  selectedApplicationId?: string;
+  showSummaries?: boolean;
+  onViewDetail?: (application: JobApplication) => void;
+  onAddClick?: () => void;
+  isMobile?: boolean;
 }
 
-export function KanbanColumn({ id, title, applications }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, applications, selectedApplicationId, showSummaries = true, onViewDetail, onAddClick, isMobile = false }: KanbanColumnProps) {
   const { isOver, setNodeRef } = useDroppable({
     id,
   });
@@ -21,27 +27,51 @@ export function KanbanColumn({ id, title, applications }: KanbanColumnProps) {
     <div
       ref={setNodeRef}
       className={cn(
-        "flex-shrink-0 w-72 bg-muted/50 rounded-lg p-3",
-        isOver && "bg-muted"
+        "bg-muted/50 rounded-lg p-3",
+        isOver && "bg-muted",
+        isMobile ? "w-full" : "flex-shrink-0 w-72"
       )}
     >
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-medium text-sm">{title}</h3>
-        <span className="text-xs text-muted-foreground bg-background px-2 py-1 rounded-full">
-          {applications.length}
-        </span>
+        <div className="flex items-center gap-2">
+          <h3 className="font-medium text-sm">{title}</h3>
+          <span className="text-xs text-muted-foreground bg-background px-2 py-1 rounded-full">
+            {applications.length}
+          </span>
+        </div>
+        <button
+          onClick={onAddClick}
+          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          title={`新增到${title}`}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
       </div>
 
       <SortableContext
         items={applications.map((app) => app.id)}
-        strategy={verticalListSortingStrategy}
+        strategy={isMobile ? horizontalListSortingStrategy : verticalListSortingStrategy}
       >
-        <div className="space-y-2 min-h-[200px]">
+        <div className={cn(
+          isMobile
+            ? "flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory -mx-3 px-3 scrollbar-hide"
+            : "space-y-2 min-h-[200px]"
+        )}>
           {applications.map((application) => (
-            <ApplicationCard key={application.id} application={application} />
+            <ApplicationCard
+              key={application.id}
+              application={application}
+              isSelected={application.id === selectedApplicationId}
+              showSummary={showSummaries}
+              onViewDetail={() => onViewDetail?.(application)}
+              isMobile={isMobile}
+            />
           ))}
           {applications.length === 0 && (
-            <div className="flex items-center justify-center h-24 border-2 border-dashed border-muted-foreground/25 rounded-lg">
+            <div className={cn(
+              "flex items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg",
+              isMobile ? "min-w-[200px] h-24 flex-shrink-0 snap-start" : "h-24"
+            )}>
               <p className="text-xs text-muted-foreground">拖曳卡片至此</p>
             </div>
           )}
