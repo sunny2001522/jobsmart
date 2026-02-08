@@ -6,13 +6,11 @@ import {
   LayoutDashboard,
   Kanban,
   FileText,
-  Building2,
   Mic,
   Linkedin,
   Heart,
   Settings,
   LogOut,
-  Search,
 } from "lucide-react";
 import {
   Sidebar,
@@ -50,19 +48,9 @@ const mainNavItems = [
     href: "/resume",
     icon: FileText,
   },
-  {
-    title: "公司資料",
-    href: "/companies",
-    icon: Building2,
-  },
 ];
 
 const toolNavItems = [
-  {
-    title: "JD 分析",
-    href: "/jd-analyzer",
-    icon: Search,
-  },
   {
     title: "面試準備",
     href: "/interview",
