@@ -41,6 +41,17 @@ interface ProfileWithGmail extends Profile {
   gmail_email?: string | null;
 }
 
+// LINE 綁定狀態類型
+interface LineBindingStatus {
+  connected: boolean;
+  binding: {
+    displayName: string | null;
+    pictureUrl: string | null;
+    linkedAt: string;
+    notificationEnabled: boolean;
+  } | null;
+}
+
 // 主要設定頁面內容組件（使用 useSearchParams）
 function SettingsContent() {
   const searchParams = useSearchParams();
@@ -61,6 +72,11 @@ function SettingsContent() {
   const [autoCompanyReview, setAutoCompanyReview] = useState(true);
   const [autoDraftEmail, setAutoDraftEmail] = useState(true);
 
+  // LINE 綁定狀態
+  const [lineBinding, setLineBinding] = useState<LineBindingStatus | null>(null);
+  const [isLoadingLine, setIsLoadingLine] = useState(true);
+  const [isUnlinkingLine, setIsUnlinkingLine] = useState(false);
+
   useEffect(() => {
     const fetchProfile = async () => {
       setIsLoading(true);
@@ -79,7 +95,43 @@ function SettingsContent() {
       setGmailJustConnected(true);
       setTimeout(() => setGmailJustConnected(false), 5000);
     }
+
+    // 取得 LINE 綁定狀態
+    const fetchLineBinding = async () => {
+      setIsLoadingLine(true);
+      try {
+        const response = await fetch("/api/line/liff/bind");
+        if (response.ok) {
+          const data = await response.json();
+          setLineBinding(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch LINE binding:", error);
+      }
+      setIsLoadingLine(false);
+    };
+    fetchLineBinding();
   }, [searchParams]);
+
+  // 解除 LINE 綁定
+  const handleUnlinkLine = async () => {
+    if (!confirm("確定要解除 LINE 連結嗎？解除後將無法透過 LINE 分享職缺。")) {
+      return;
+    }
+
+    setIsUnlinkingLine(true);
+    try {
+      const response = await fetch("/api/line/liff/bind", {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        setLineBinding({ connected: false, binding: null });
+      }
+    } catch (error) {
+      console.error("Failed to unlink LINE:", error);
+    }
+    setIsUnlinkingLine(false);
+  };
 
   const handleSaveProfile = async () => {
     if (!profile) return;
@@ -525,6 +577,134 @@ function SettingsContent() {
                     <a href="/api/auth/gmail">
                       <Link2 className="h-4 w-4 mr-2" />
                       連結 Gmail
+                    </a>
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* LINE 連結 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="text-green-500"
+                >
+                  <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+                </svg>
+                LINE 官方帳號
+                {lineBinding?.connected && (
+                  <Badge variant="secondary" className="ml-2">
+                    <Check className="h-3 w-3 mr-1" />
+                    已連結
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                連結 LINE 後，直接在聊天室分享職缺連結即可追蹤
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingLine ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-10 w-32" />
+                </div>
+              ) : lineBinding?.connected ? (
+                <>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 dark:bg-green-950">
+                    <div className="flex items-center gap-3">
+                      {lineBinding.binding?.pictureUrl ? (
+                        <img
+                          src={lineBinding.binding.pictureUrl}
+                          alt={lineBinding.binding.displayName || "LINE"}
+                          className="h-10 w-10 rounded-full"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            className="text-green-600"
+                          >
+                            <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+                          </svg>
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-medium">
+                          {lineBinding.binding?.displayName || "LINE 用戶"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          已連結的 LINE 帳號
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleUnlinkLine}
+                      disabled={isUnlinkingLine}
+                    >
+                      {isUnlinkingLine ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <Unlink className="h-4 w-4 mr-1" />
+                      )}
+                      解除
+                    </Button>
+                  </div>
+                  <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                    <h4 className="font-medium text-sm">使用方式</h4>
+                    <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>在 LINE 聊天室直接貼上職缺連結</li>
+                      <li>或從其他 App 分享到 LINE 官方帳號</li>
+                      <li>系統會自動處理並通知你結果</li>
+                    </ol>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    連結 LINE 後，你可以直接在聊天室分享職缺連結，系統會自動解析、查詢公司評價、客製化履歷，並推送結果通知給你。
+                  </p>
+                  <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+                    <h4 className="font-medium">連結步驟</h4>
+                    <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                      <li>加入 JobSmart LINE 官方帳號</li>
+                      <li>在聊天室中點擊連結帳號按鈕</li>
+                      <li>使用 Google 登入完成綁定</li>
+                    </ol>
+                  </div>
+                  <Button
+                    className="bg-green-500 hover:bg-green-600"
+                    asChild
+                  >
+                    <a
+                      href="https://line.me/R/ti/p/@jobsmart"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="mr-2"
+                      >
+                        <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+                      </svg>
+                      加入 LINE 官方帳號
                     </a>
                   </Button>
                 </>

@@ -132,3 +132,12 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* iOS Safe Area 處理 */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}

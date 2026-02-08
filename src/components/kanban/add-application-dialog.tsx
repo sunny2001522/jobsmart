@@ -222,14 +222,14 @@ export function AddApplicationDialog({
               <div className="space-y-2">
                 <Label htmlFor="category">職位類別 (選填)</Label>
                 <Select
-                  value={categoryId || ""}
-                  onValueChange={(value) => setCategoryId(value || null)}
+                  value={categoryId || "none"}
+                  onValueChange={(value) => setCategoryId(value === "none" ? null : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="選擇類別" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">不分類</SelectItem>
+                    <SelectItem value="none">不分類</SelectItem>
                     {categories.map((cat) => (
                       <SelectItem key={cat.id} value={cat.id}>
                         <div className="flex items-center gap-2">
