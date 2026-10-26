@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getApplicationStats, getRecentActivity, type RecentActivity } from "@/lib/supabase/db";
+import { getApplicationStats, getRecentActivity, type RecentActivity } from "@/lib/turso/db";
 
 interface DashboardStats {
   totalApplications: number;

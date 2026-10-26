@@ -31,9 +31,9 @@ import {
   Unlink,
   CheckCircle2,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { getProfile, updateProfile } from "@/lib/supabase/db";
-import type { Profile } from "@/lib/supabase/types";
+import { createClient } from "@/lib/turso/client";
+import { getProfile, updateProfile } from "@/lib/turso/db";
+import type { Profile } from "@/lib/turso/types";
 
 // 擴展 Profile 類型以包含 Gmail 相關欄位
 interface ProfileWithGmail extends Profile {
@@ -150,8 +150,8 @@ function SettingsContent() {
   };
 
   const handleSignOut = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    const tursoClient = createClient();
+    await tursoClient.auth.signOut();
     window.location.href = "/login";
   };
 

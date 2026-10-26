@@ -5,7 +5,7 @@ import {
   getCachedCompanyReviews,
   setCachedCompanyReviews,
 } from "@/lib/redis/client";
-import { saveInterviewExperiences } from "@/lib/supabase/db";
+import { saveInterviewExperiences } from "@/lib/turso/db";
 import type { InterviewSource } from "@/types";
 
 // Vercel serverless function configuration

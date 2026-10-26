@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/turso/compat";
 import {
   exchangeCodeForTokens,
   saveGmailTokens,
@@ -55,10 +55,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 驗證當前用戶
-    const supabase = await createClient();
+    const tursoClient = await createClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await tursoClient.auth.getUser();
 
     if (!user || user.id !== stateData.userId) {
       return NextResponse.redirect(

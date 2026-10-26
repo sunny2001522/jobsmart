@@ -65,7 +65,35 @@ export async function ensureTursoSchema() {
       account_label TEXT, scopes_json TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL,
       PRIMARY KEY (user_id, provider)
     )`,
+    `CREATE TABLE IF NOT EXISTS gmail_oauth_tokens (
+      user_id TEXT PRIMARY KEY, access_token_encrypted TEXT, refresh_token_encrypted TEXT,
+      token_expires_at TEXT, gmail_email TEXT, created_at TEXT, updated_at TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS line_user_bindings (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, line_user_id TEXT NOT NULL,
+      line_display_name TEXT, line_picture_url TEXT, is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )`,
   ], "write");
+
+  // Older deployments created resume_versions with the original, specialized
+  // schema above. The repository now stores records in the shared JSON shape,
+  // so add the shared columns lazily without destroying existing resumes.
+  if (db) {
+    const columns = await db.execute("PRAGMA table_info(resume_versions)");
+    const existing = new Set(columns.rows.map((row) => String(row.name)));
+    const migrations: string[] = [];
+    if (!existing.has("status")) migrations.push("ALTER TABLE resume_versions ADD COLUMN status TEXT");
+    if (!existing.has("category_id")) migrations.push("ALTER TABLE resume_versions ADD COLUMN category_id TEXT");
+    if (!existing.has("display_order")) migrations.push("ALTER TABLE resume_versions ADD COLUMN display_order INTEGER DEFAULT 0");
+    if (!existing.has("updated_at")) migrations.push("ALTER TABLE resume_versions ADD COLUMN updated_at TEXT");
+    if (!existing.has("data_json")) migrations.push("ALTER TABLE resume_versions ADD COLUMN data_json TEXT NOT NULL DEFAULT '{}'");
+    if (migrations.length) await db.batch(migrations, "write");
+    await db.batch([
+      "UPDATE resume_versions SET updated_at = COALESCE(updated_at, created_at) WHERE updated_at IS NULL",
+      "UPDATE resume_versions SET data_json = json_object('title', title, 'content_json', content_json, 'job_id', job_id, 'ats_score', ats_score) WHERE data_json = '{}' OR data_json IS NULL",
+    ], "write");
+  }
   return true;
 }
 

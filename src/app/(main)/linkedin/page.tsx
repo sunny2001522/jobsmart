@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useJobApplications } from "@/hooks/use-job-applications";
 import { useResumeVersions } from "@/hooks/use-resume-versions";
-import type { JobApplication } from "@/lib/supabase/types";
+import type { JobApplication } from "@/lib/turso/types";
 import {
   Sparkles,
   Copy,

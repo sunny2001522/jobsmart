@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { GripVertical, RotateCcw, Loader2, Check, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getValueRanking, saveValueRanking } from "@/lib/supabase/db";
+import { getValueRanking, saveValueRanking } from "@/lib/turso/db";
 import {
   DndContext,
   closestCenter,

@@ -3,14 +3,14 @@ import { ensureTursoSchema, getTursoClient } from "@/lib/turso/server";
 
 const defaults = { enabled: false, frequency: "daily", mode: "review", query: "AI product manager", sources: ["linkedin", "indeed", "cake", "104"], nextRunAt: null };
 const frequencies = new Set(["manual", "hourly", "daily"]);
-const modes = new Set(["review", "ask", "auto"]);
+const modes = new Set(["review", "ask"]);
 
 export async function GET() {
   const db = getTursoClient(); if (!db) return NextResponse.json({ error: "Turso is not configured" }, { status: 503 });
   await ensureTursoSchema();
   const result = await db.execute({ sql: "SELECT * FROM job_automation_settings WHERE user_id = ?", args: ["demo-user"] });
   const row = result.rows[0]; if (!row) return NextResponse.json({ data: defaults });
-  return NextResponse.json({ data: { enabled: Boolean(row.enabled), frequency: String(row.frequency), mode: String(row.mode), query: String(row.query), sources: JSON.parse(String(row.sources_json)), nextRunAt: row.next_run_at ?? null } });
+  return NextResponse.json({ data: { enabled: Boolean(row.enabled), frequency: String(row.frequency), mode: String(row.mode) === "ask" ? "ask" : "review", query: String(row.query), sources: JSON.parse(String(row.sources_json)), nextRunAt: row.next_run_at ?? null } });
 }
 
 export async function POST(request: Request) {

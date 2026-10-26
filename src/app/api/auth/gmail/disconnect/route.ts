@@ -3,15 +3,15 @@
  */
 
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/turso/compat";
 import { disconnectGmail } from "@/lib/gmail/oauth";
 
 export async function POST() {
   try {
-    const supabase = await createClient();
+    const tursoClient = await createClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await tursoClient.auth.getUser();
 
     if (!user) {
       return NextResponse.json(

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/turso/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle, XCircle, Smartphone } from "lucide-react";
@@ -104,9 +104,9 @@ export default function LiffAuthPage() {
   async function handleGoogleLogin() {
     setState("logging_in");
 
-    const supabase = createClient();
+    const tursoClient = createClient();
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await tursoClient.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/liff/auth/callback`,
@@ -134,8 +134,8 @@ export default function LiffAuthPage() {
     setState("binding");
 
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const tursoClient = createClient();
+      const { data: { user } } = await tursoClient.auth.getUser();
 
       if (!user) {
         setError("請先登入 JobSmart");
@@ -185,8 +185,8 @@ export default function LiffAuthPage() {
   }, [state, lineProfile]);
 
   async function checkAndBind() {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const tursoClient = createClient();
+    const { data: { user } } = await tursoClient.auth.getUser();
 
     if (user) {
       setJobsmartUser({ email: user.email || "" });

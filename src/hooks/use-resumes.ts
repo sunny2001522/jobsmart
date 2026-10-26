@@ -7,8 +7,8 @@ import {
   createResume,
   updateResume,
   deleteResume,
-} from "@/lib/supabase/db";
-import type { Resume, ResumeInsert, ResumeUpdate } from "@/lib/supabase/types";
+} from "@/lib/turso/db";
+import type { Resume, ResumeInsert, ResumeUpdate } from "@/lib/turso/types";
 
 export function useResumes() {
   const [resumes, setResumes] = useState<Resume[]>([]);

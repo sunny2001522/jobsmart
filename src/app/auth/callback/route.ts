@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/turso/compat";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -7,8 +7,8 @@ export async function GET(request: Request) {
   const redirectTo = searchParams.get("redirectTo") || "/dashboard";
 
   if (code) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const tursoClient = await createClient();
+    const { error } = await tursoClient.auth.exchangeCodeForSession(code);
 
     if (!error) {
       return NextResponse.redirect(`${origin}${redirectTo}`);

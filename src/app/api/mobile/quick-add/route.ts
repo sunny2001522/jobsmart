@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/turso/compat";
 import { aiGateway } from "@/lib/ai/gateway";
 import { crawlCompanyReviews, calculateCompanyRatings } from "@/lib/crawler";
 import {
@@ -32,7 +32,7 @@ import {
   updateVersionJobResume,
   getVersionJobResume,
   getProfile,
-} from "@/lib/supabase/db";
+} from "@/lib/turso/db";
 
 // 請求 schema
 const quickAddSchema = z.object({
@@ -162,10 +162,10 @@ export async function POST(request: NextRequest) {
 
   try {
     // 1. 驗證用戶
-    const supabase = await createClient();
+    const tursoClient = await createClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await tursoClient.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -285,7 +285,7 @@ export async function POST(request: NextRequest) {
     );
 
     // 6. 建立 job_application
-    // 注意: source_type 等欄位需要透過 Supabase client 直接插入
+    // 注意: source_type 等欄位需要透過 Turso client 直接插入
     // 因為 JobApplicationInsert 類型尚未包含這些欄位
     const jobApp = await createJobApplication({
       company_name: jobData.companyName,
@@ -323,10 +323,10 @@ export async function POST(request: NextRequest) {
       value_scores: null,
     } as Parameters<typeof createJobApplication>[0]);
 
-    // 更新擴展欄位（透過 Supabase 直接更新）
+    // 更新擴展欄位（透過 Turso 直接更新）
     if (jobApp) {
-      const supabaseForUpdate = await createClient();
-      await supabaseForUpdate.from("job_applications").update({
+      const tursoClientForUpdate = await createClient();
+      await tursoClientForUpdate.from("job_applications").update({
         source_type: jobData.sourceType,
         source_content: jobData.sourceContent || null,
         source_post_url: jobData.sourceUrl,

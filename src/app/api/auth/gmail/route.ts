@@ -4,16 +4,16 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/turso/compat";
 import { getAuthUrl } from "@/lib/gmail/oauth";
 
 export async function GET(request: NextRequest) {
   try {
     // 驗證用戶
-    const supabase = await createClient();
+    const tursoClient = await createClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await tursoClient.auth.getUser();
 
     if (!user) {
       return NextResponse.redirect(

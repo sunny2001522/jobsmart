@@ -18,8 +18,8 @@ import {
   createErrorMessage,
 } from "@/lib/line/messages";
 import { enqueueJobProcess } from "@/lib/queue/qstash";
-import { createClient } from "@/lib/supabase/server";
-import { LineUserBinding } from "@/lib/supabase/types";
+import { createClient } from "@/lib/turso/compat";
+import { LineUserBinding } from "@/lib/turso/types";
 
 const LIFF_URL = process.env.LINE_LIFF_ID
   ? `https://liff.line.me/${process.env.LINE_LIFF_ID}`
@@ -31,8 +31,8 @@ const LIFF_URL = process.env.LINE_LIFF_ID
 async function getLineUserBinding(
   lineUserId: string
 ): Promise<LineUserBinding | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const tursoClient = await createClient();
+  const { data, error } = await tursoClient
     .from("line_user_bindings")
     .select("*")
     .eq("line_user_id", lineUserId)
@@ -50,8 +50,8 @@ async function getLineUserBinding(
  * 更新最後互動時間
  */
 async function updateLastInteraction(lineUserId: string): Promise<void> {
-  const supabase = await createClient();
-  await supabase
+  const tursoClient = await createClient();
+  await tursoClient
     .from("line_user_bindings")
     .update({ last_interaction_at: new Date().toISOString() })
     .eq("line_user_id", lineUserId);

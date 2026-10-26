@@ -11,7 +11,7 @@ import {
   removeJobFromVersion,
   getVersionJobResumes,
   updateVersionJobResume,
-} from "@/lib/supabase/db";
+} from "@/lib/turso/db";
 import type {
   ResumeVersion,
   ResumeVersionInsert,
@@ -20,7 +20,7 @@ import type {
   VersionJobResume,
   VersionJobResumeUpdate,
   JobApplication,
-} from "@/lib/supabase/types";
+} from "@/lib/turso/types";
 
 // 履歷版本列表 Hook
 export function useResumeVersions() {

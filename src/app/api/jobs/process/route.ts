@@ -8,8 +8,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyQStashSignature } from "@/lib/queue/qstash";
 import { pushMessage } from "@/lib/line/client";
 import { createJobAddedMessage, createErrorMessage } from "@/lib/line/messages";
-import { ProcessJobPayload } from "@/lib/supabase/types";
-import { createAdminClient } from "@/lib/supabase/server";
+import { ProcessJobPayload } from "@/lib/turso/types";
+import { createAdminClient } from "@/lib/turso/compat";
 import { aiGateway } from "@/lib/ai/gateway";
 import { crawlCompanyReviews, calculateCompanyRatings } from "@/lib/crawler";
 import {
@@ -170,10 +170,10 @@ export async function POST(request: NextRequest) {
     console.log(`Processing job ${jobId} for user ${userId}`);
 
     // 使用 Admin Client（因為這是背景任務，沒有用戶 session）
-    const supabase = createAdminClient();
+    const tursoClient = createAdminClient();
 
     // 取得用戶資料
-    const { data: profile } = await supabase
+    const { data: profile } = await tursoClient
       .from("profiles")
       .select("*")
       .eq("id", userId)
@@ -266,13 +266,13 @@ export async function POST(request: NextRequest) {
 
     // 取得用戶的類別和履歷版本
     const [categoriesResult, versionsResult] = await Promise.all([
-      supabase
+      tursoClient
         .from("job_categories")
         .select("*")
         .eq("user_id", userId)
         .eq("is_active", true)
         .order("display_order"),
-      supabase
+      tursoClient
         .from("resume_versions")
         .select("*")
         .eq("user_id", userId)
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
     );
 
     // 建立 job_application
-    const { data: jobApp, error: insertError } = await supabase
+    const { data: jobApp, error: insertError } = await tursoClient
       .from("job_applications")
       .insert({
         user_id: userId,
@@ -359,7 +359,7 @@ export async function POST(request: NextRequest) {
     if (options.autoCustomize && classification.resumeVersion.versionId) {
       try {
         // 將職缺添加到版本
-        await supabase.from("version_job_resumes").insert({
+        await tursoClient.from("version_job_resumes").insert({
           version_id: classification.resumeVersion.versionId,
           job_application_id: jobApp.id,
           generation_status: "generating",
@@ -368,7 +368,7 @@ export async function POST(request: NextRequest) {
 
         // 取得版本的基礎履歷
         const version = versions.find(
-          (v) => v.id === classification.resumeVersion.versionId
+          (v: any) => v.id === classification.resumeVersion.versionId
         );
         if (version?.base_plain_text) {
           // 呼叫 AI 客製化
@@ -380,7 +380,7 @@ export async function POST(request: NextRequest) {
           );
 
           // 更新 version_job_resume
-          await supabase
+          await tursoClient
             .from("version_job_resumes")
             .update({
               customized_plain_text: customization.customizedContent,
@@ -419,7 +419,7 @@ export async function POST(request: NextRequest) {
             jobDescription: jobData.description,
             applicationInstruction: jobData.applicationInstruction,
             resumePlainText: customizedResume
-              ? versions.find((v) => v.id === customizedResume.versionId)
+              ? versions.find((v: any) => v.id === customizedResume.versionId)
                   ?.base_plain_text || undefined
               : undefined,
             applicantName: profile?.name || undefined,

@@ -4,7 +4,7 @@
  */
 
 import { Client, Receiver } from "@upstash/qstash";
-import { ProcessJobPayload } from "@/lib/supabase/types";
+import { ProcessJobPayload } from "@/lib/turso/types";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 

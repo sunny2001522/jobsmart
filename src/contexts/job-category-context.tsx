@@ -8,14 +8,14 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import type { JobCategory } from "@/lib/supabase/types";
+import type { JobCategory } from "@/lib/turso/types";
 import {
   getJobCategories,
   createJobCategory as dbCreateCategory,
   updateJobCategory as dbUpdateCategory,
   deleteJobCategory as dbDeleteCategory,
   reorderJobCategories as dbReorderCategories,
-} from "@/lib/supabase/db";
+} from "@/lib/turso/db";
 
 interface JobCategoryContextValue {
   // 數據

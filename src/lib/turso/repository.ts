@@ -8,7 +8,7 @@ import type {
   JobApplicationUpdate, JobCategory, JobCategoryInsert, JobCategoryUpdate, Profile, ProfileUpdate,
   Resume, ResumeInsert, ResumeUpdate, ResumeVersion, ResumeVersionInsert, ResumeVersionUpdate,
   ValueRanking, ValueRankingInsert, VersionJobResume, VersionJobResumeUpdate, ResumeVersionWithJobs,
-} from "@/lib/supabase/types";
+} from "@/lib/turso/types";
 import type { InterviewExperience } from "@/types";
 
 type AnyRecord = Record<string, unknown>;
@@ -40,6 +40,31 @@ async function save(table: string, data: AnyRecord, id = String(data.id ?? crypt
   await ensureTursoSchema();
   const timestamp = now(); const uid = String(data.user_id ?? await userId());
   const record: AnyRecord = { ...data, id, user_id: uid, created_at: String(data.created_at ?? timestamp), updated_at: timestamp };
+  if (table === "resume_versions") {
+    // Keep writes compatible with the legacy resume_versions columns that are
+    // still present in existing Turso databases.
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO resume_versions
+        (id, user_id, job_id, title, content_json, ats_score, status, category_id,
+         display_order, created_at, updated_at, data_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        id,
+        uid,
+        record.job_id == null ? null : String(record.job_id),
+        String(record.title ?? "履歷版本"),
+        String(record.content_json ?? JSON.stringify(record.content ?? {})),
+        record.ats_score == null ? null : Number(record.ats_score),
+        record.status == null ? null : String(record.status),
+        record.category_id == null ? null : String(record.category_id),
+        Number(record.display_order ?? 0),
+        String(record.created_at),
+        timestamp,
+        JSON.stringify(record),
+      ],
+    });
+    return record;
+  }
   const values: InValue[] = [id, uid, record.status == null ? null : String(record.status), record.category_id == null ? null : String(record.category_id), Number(record.display_order ?? 0), String(record.created_at), timestamp, JSON.stringify(record)];
   await db.execute({ sql: `INSERT OR REPLACE INTO ${table} (id, user_id, status, category_id, display_order, created_at, updated_at, data_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: values });
   return record;

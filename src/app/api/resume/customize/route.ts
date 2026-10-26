@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { customizeResume } from "@/lib/ai/gateway";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/turso/compat";
 import {
   getResumeVersion,
   getVersionJobResume,
   updateVersionJobResume,
-} from "@/lib/supabase/db";
+} from "@/lib/turso/db";
 
 const customizeSchema = z.object({
   versionId: z.string().uuid("無效的版本 ID"),
@@ -15,13 +15,13 @@ const customizeSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const tursoClient = await createClient();
 
     // 驗證使用者
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser();
+    } = await tursoClient.auth.getUser();
 
     if (authError || !user) {
       return NextResponse.json(
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 取得工作詳細資訊
-    const { data: jobApplication, error: jobError } = await supabase
+    const { data: jobApplication, error: jobError } = await tursoClient
       .from("job_applications")
       .select("*")
       .eq("id", jobApplicationId)

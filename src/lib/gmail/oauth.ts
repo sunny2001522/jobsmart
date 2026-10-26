@@ -4,7 +4,7 @@
  */
 
 import { google } from "googleapis";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/turso/compat";
 import crypto from "crypto";
 
 // Gmail OAuth 設定
@@ -118,14 +118,14 @@ export async function saveGmailTokens(
   },
   gmailEmail: string
 ) {
-  const supabase = await createClient();
+  const tursoClient = await createClient();
 
   // 加密 tokens
   const accessTokenEncrypted = encryptToken(tokens.access_token);
   const refreshTokenEncrypted = encryptToken(tokens.refresh_token);
 
   // Upsert 到資料庫
-  const { error } = await supabase.from("gmail_oauth_tokens").upsert(
+  const { error } = await tursoClient.from("gmail_oauth_tokens").upsert(
     {
       user_id: userId,
       access_token_encrypted: accessTokenEncrypted,
@@ -142,7 +142,7 @@ export async function saveGmailTokens(
   }
 
   // 更新 profile
-  await supabase
+  await tursoClient
     .from("profiles")
     .update({
       gmail_connected: true,
@@ -160,9 +160,9 @@ export async function getGmailTokens(userId: string): Promise<{
   expiresAt: Date;
   gmailEmail: string;
 } | null> {
-  const supabase = await createClient();
+  const tursoClient = await createClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await tursoClient
     .from("gmail_oauth_tokens")
     .select("*")
     .eq("user_id", userId)
@@ -205,8 +205,8 @@ export async function getGmailClient(userId: string) {
 
     // 更新資料庫中的 token
     if (credentials.access_token && credentials.expiry_date) {
-      const supabase = await createClient();
-      await supabase
+      const tursoClient = await createClient();
+      await tursoClient
         .from("gmail_oauth_tokens")
         .update({
           access_token_encrypted: encryptToken(credentials.access_token),
@@ -239,13 +239,13 @@ export async function isGmailConnected(userId: string): Promise<boolean> {
  * 斷開 Gmail 連結
  */
 export async function disconnectGmail(userId: string): Promise<void> {
-  const supabase = await createClient();
+  const tursoClient = await createClient();
 
   // 刪除 token 記錄
-  await supabase.from("gmail_oauth_tokens").delete().eq("user_id", userId);
+  await tursoClient.from("gmail_oauth_tokens").delete().eq("user_id", userId);
 
   // 更新 profile
-  await supabase
+  await tursoClient
     .from("profiles")
     .update({
       gmail_connected: false,

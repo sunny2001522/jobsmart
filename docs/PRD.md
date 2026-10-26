@@ -91,7 +91,7 @@
 - AI 分析回應 < 10 秒
 
 ### 3.2 安全需求
-- Supabase RLS 確保用戶資料隔離
+- Turso RLS 確保用戶資料隔離
 - NextAuth.js 身份驗證
 - 敏感資料加密儲存
 

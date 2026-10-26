@@ -7,8 +7,8 @@ import {
   updateJobApplication,
   deleteJobApplication,
   getApplicationStats,
-} from "@/lib/supabase/db";
-import type { JobApplication, JobApplicationInsert, JobApplicationUpdate, ApplicationStatus } from "@/lib/supabase/types";
+} from "@/lib/turso/db";
+import type { JobApplication, JobApplicationInsert, JobApplicationUpdate, ApplicationStatus } from "@/lib/turso/types";
 
 interface ApplicationStats {
   total: number;

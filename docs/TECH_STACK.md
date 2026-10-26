@@ -8,13 +8,13 @@
 │  Next.js 16 + React 19 + TypeScript + Tailwind CSS 4        │
 ├─────────────────────────────────────────────────────────────┤
 │                        Backend                               │
-│  Next.js API Routes + Supabase (PostgreSQL + Auth)          │
+│  Next.js API Routes + Turso (PostgreSQL + Auth)          │
 ├─────────────────────────────────────────────────────────────┤
 │                      AI Services                             │
 │  Google Gemini 2.0 Flash | OpenAI GPT-4 Turbo | Whisper     │
 ├─────────────────────────────────────────────────────────────┤
 │                      Data Layer                              │
-│  Supabase (DB + RLS) | Upstash Redis (Cache)                │
+│  Turso (DB + RLS) | Upstash Redis (Cache)                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,7 +70,7 @@
 ### 3.2 資料庫
 | 技術 | 用途 |
 |------|------|
-| Supabase (PostgreSQL) | 主資料庫 |
+| Turso (PostgreSQL) | 主資料庫 |
 | Row-Level Security (RLS) | 多租戶資料隔離 |
 | Database Triggers | 自動化 (建立 profile、更新時間戳) |
 
@@ -78,7 +78,7 @@
 | 技術 | 版本 | 用途 |
 |------|------|------|
 | NextAuth.js | 5.0.0-beta.30 | 身份驗證 |
-| Supabase Auth | 最新 | OAuth Provider |
+| Turso Auth | 最新 | OAuth Provider |
 
 ### 3.4 快取
 | 技術 | 用途 |
@@ -153,7 +153,7 @@ ai_usage_logs     → AI 用量追蹤
 ```
 用戶搜尋公司 → 檢查 Redis 快取 →
 若無快取 → 並行爬取多來源 →
-AI 情感分析 → 儲存 Supabase → 回傳結果
+AI 情感分析 → 儲存 Turso → 回傳結果
 ```
 
 ---
@@ -190,7 +190,7 @@ src/
 ├── lib/
 │   ├── ai/                 # AI Gateway
 │   ├── crawler/            # 網頁爬蟲
-│   ├── supabase/           # 資料庫操作
+│   ├── turso/           # 資料庫操作
 │   ├── redis/              # 快取
 │   └── utils.ts
 │
@@ -209,10 +209,9 @@ src/
 ## 8. 環境變數
 
 ```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+# Turso
+ TURSO_DATABASE_URL=
+ TURSO_AUTH_TOKEN=
 
 # AI Services
 GOOGLE_AI_API_KEY=
@@ -255,6 +254,6 @@ npx tsc --noEmit
 | 服務 | 平台 | 備註 |
 |------|------|------|
 | Frontend | Vercel | Next.js 原生支援 |
-| Database | Supabase | PostgreSQL + Auth |
+| Database | Turso | PostgreSQL + Auth |
 | Cache | Upstash Redis | Serverless Redis |
 | AI | Google Cloud / OpenAI | API 呼叫 |

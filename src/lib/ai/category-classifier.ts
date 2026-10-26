@@ -4,7 +4,7 @@
  */
 
 import { aiGateway } from "./gateway";
-import type { JobCategory, ResumeVersion } from "@/lib/supabase/types";
+import type { JobCategory, ResumeVersion } from "@/lib/turso/types";
 
 // 職缺類別判斷結果
 export interface CategoryClassification {

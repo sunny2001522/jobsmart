@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/turso/compat";
 import { pushMessage } from "@/lib/line/client";
 import { createBindingSuccessMessage } from "@/lib/line/messages";
 
@@ -22,10 +22,10 @@ const bindSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     // 驗證用戶
-    const supabase = await createClient();
+    const tursoClient = await createClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await tursoClient.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const { lineUserId, displayName, pictureUrl } = bindSchema.parse(body);
 
     // 檢查是否已有綁定
-    const { data: existingBinding } = await supabase
+    const { data: existingBinding } = await tursoClient
       .from("line_user_bindings")
       .select("*")
       .eq("user_id", user.id)
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     if (existingBinding) {
       // 更新現有綁定
-      const { error: updateError } = await supabase
+      const { error: updateError } = await tursoClient
         .from("line_user_bindings")
         .update({
           line_user_id: lineUserId,
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // 檢查此 LINE 帳號是否已綁定其他用戶
-      const { data: lineBinding } = await supabase
+      const { data: lineBinding } = await tursoClient
         .from("line_user_bindings")
         .select("*")
         .eq("line_user_id", lineUserId)
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 建立新綁定
-      const { error: insertError } = await supabase
+      const { error: insertError } = await tursoClient
         .from("line_user_bindings")
         .insert({
           user_id: user.id,
@@ -139,10 +139,10 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE() {
   try {
-    const supabase = await createClient();
+    const tursoClient = await createClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await tursoClient.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -152,7 +152,7 @@ export async function DELETE() {
     }
 
     // 停用綁定（不刪除，保留紀錄）
-    const { error } = await supabase
+    const { error } = await tursoClient
       .from("line_user_bindings")
       .update({ is_active: false })
       .eq("user_id", user.id);
@@ -184,10 +184,10 @@ export async function DELETE() {
  */
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const tursoClient = await createClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await tursoClient.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -196,7 +196,7 @@ export async function GET() {
       );
     }
 
-    const { data: binding } = await supabase
+    const { data: binding } = await tursoClient
       .from("line_user_bindings")
       .select("*")
       .eq("user_id", user.id)

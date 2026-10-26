@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import type { JobCategory, CategoryStats } from "@/lib/supabase/types";
+import type { JobCategory, CategoryStats } from "@/lib/turso/types";
 import {
   getJobCategories,
   createJobCategory as dbCreateCategory,
@@ -9,7 +9,7 @@ import {
   deleteJobCategory as dbDeleteCategory,
   reorderJobCategories as dbReorderCategories,
   getCategoryStats as dbGetCategoryStats,
-} from "@/lib/supabase/db";
+} from "@/lib/turso/db";
 
 // 直接使用的 hook（適用於非 Context 場景）
 export function useJobCategories() {

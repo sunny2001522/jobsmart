@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -11,8 +12,9 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Check, FileText, Loader2 } from "lucide-react";
+import { Check, FileText, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { JDSection } from "./drawer-sections/jd-section";
 import { ReviewsSection } from "./drawer-sections/reviews-section";
 import {
@@ -24,7 +26,9 @@ import {
   getCompanyReviewsByName,
   getValueRanking,
   updateJobApplication,
-} from "@/lib/supabase/db";
+  getVersionJobResume,
+  updateVersionJobResume,
+} from "@/lib/turso/db";
 import { calculateValueMatch } from "@/lib/values/matcher";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type {
@@ -37,6 +41,7 @@ import type {
   InterviewSourceResult,
   InterviewAggregated,
 } from "@/types";
+import type { VersionJobResume } from "@/lib/turso/types";
 import { APPLICATION_STATUS_LABELS } from "@/types";
 
 type ReviewSource = "dcard" | "qollie" | "ptt" | "medium";
@@ -115,9 +120,39 @@ function ApplicationDetailContent({
   onSubmitApplication,
 }: ApplicationDetailContentProps) {
   const metadata = application as JobApplication & Record<string, unknown>;
-  const automationMode = String(metadata.automation_mode || "review");
   const resumeStatus = String(metadata.resume_status || "ready");
   const coverLetterStatus = String(metadata.cover_letter_status || "ready");
+  const resumeVersionId = String(metadata.resume_version_id || "");
+  const [tailoredResume, setTailoredResume] = useState<VersionJobResume | null>(null);
+  const [tailoredText, setTailoredText] = useState("");
+  const [savingTailoredResume, setSavingTailoredResume] = useState(false);
+  useEffect(() => {
+    let current = true;
+    if (!resumeVersionId) {
+      setTailoredResume(null);
+      setTailoredText("");
+      return () => { current = false; };
+    }
+    getVersionJobResume(resumeVersionId, application.id).then((result) => {
+      if (!current) return;
+      setTailoredResume(result);
+      setTailoredText(result?.customized_plain_text || "");
+    }).catch((error) => console.error("Failed to load tailored resume", error));
+    return () => { current = false; };
+  }, [resumeVersionId, application.id]);
+  const saveTailoredResume = async () => {
+    if (!tailoredResume) return;
+    setSavingTailoredResume(true);
+    try {
+      const saved = await updateVersionJobResume(tailoredResume.id, { customized_plain_text: tailoredText });
+      if (!saved) throw new Error("儲存失敗");
+      setTailoredResume(saved);
+      toast.success("客製履歷已儲存");
+    } catch (error) {
+      console.error("Failed to save tailored resume", error);
+      toast.error("客製履歷儲存失敗，請重試");
+    } finally { setSavingTailoredResume(false); }
+  };
   const legacyLinkedInTitle = application.position.match(/^(.+?)\s+at\s+(.+?)(?:\s+[—|-].*)?$/i);
   const displayPosition = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name) ? legacyLinkedInTitle[1].trim() : application.position;
   const displayCompany = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name) ? legacyLinkedInTitle[2].trim() : (/linkedin\.com/i.test(application.company_name) ? "LinkedIn 職缺" : application.company_name);
@@ -139,7 +174,23 @@ function ApplicationDetailContent({
         </div>
       </div>
 
-      {application.status === "editing" && <div className="border-b p-4"><div className="mb-3 flex items-center justify-between"><p className="text-sm font-medium">AI 投遞準備</p><span className="text-xs text-muted-foreground">{automationMode === "auto" ? "自動模式" : "等待同意"}</span></div><div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded border p-2"><p className="text-muted-foreground">履歷</p><p className="mt-1 flex items-center gap-1 font-medium">{resumeStatus === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}{resumeStatus === "generating" ? "AI 修改中" : "已準備"}</p></div><div className="rounded border p-2"><p className="text-muted-foreground">Cover Letter</p><p className="mt-1 flex items-center gap-1 font-medium">{coverLetterStatus === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}{coverLetterStatus === "generating" ? "AI 修改中" : "已準備"}</p></div></div>{automationMode === "auto" ? <p className="mt-3 text-xs text-primary">自動模式：AI 完成後會自動進入投遞流程。</p> : <Button className="mt-3 w-full" size="sm" onClick={onSubmitApplication}><Check className="mr-2 h-4 w-4" />可以投遞</Button>}</div>}
+      {application.status === "editing" && <div className="border-b p-4">
+        <div className="mb-3"><p className="text-sm font-medium">投遞準備</p><p className="mt-1 text-xs text-muted-foreground">送出前請檢查履歷與原始職缺頁；JobSmart 不會代替你提交申請。</p></div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded border p-2"><p className="text-muted-foreground">履歷</p><p className="mt-1 flex items-center gap-1 font-medium">{resumeStatus === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}{resumeStatus === "generating" ? "草稿生成中" : resumeStatus === "needs_review" ? "待你審核" : resumeStatus === "ready" ? "請檢查履歷" : "尚未準備"}</p></div>
+          <div className="rounded border p-2"><p className="text-muted-foreground">求職信</p><p className="mt-1 font-medium">{coverLetterStatus === "not_created" ? "尚未建立" : coverLetterStatus === "generating" ? "準備中" : "可自行補充"}</p></div>
+        </div>
+        {tailoredResume?.customized_plain_text && <details className="mt-3 rounded-lg border">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium"><span>客製履歷草稿 · 待你審核</span><span className="text-muted-foreground">ATS {tailoredResume.ats_score ?? "—"}/100</span></summary>
+          <div className="space-y-2 border-t p-3">
+            <p className="text-[11px] leading-5 text-muted-foreground">已匹配：{tailoredResume.matched_keywords?.join("、") || "—"}<br />尚未涵蓋：{tailoredResume.missing_keywords?.join("、") || "—"}</p>
+            <Textarea aria-label="客製履歷草稿" value={tailoredText} onChange={(event) => setTailoredText(event.target.value)} rows={10} className="resize-y text-xs leading-5" />
+            <Button size="sm" className="w-full" variant="secondary" disabled={savingTailoredResume || tailoredText === tailoredResume.customized_plain_text} onClick={saveTailoredResume}>{savingTailoredResume ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}{savingTailoredResume ? "儲存中" : "儲存草稿修改"}</Button>
+          </div>
+        </details>}
+        {application.jd_url && <Button className="mt-3 w-full" size="sm" variant="outline" asChild><a href={application.jd_url} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />開啟職缺原頁</a></Button>}
+        <Button className="mt-2 w-full" size="sm" onClick={onSubmitApplication}><Check className="mr-2 h-4 w-4" />我已親自送出申請</Button>
+      </div>}
 
       <Tabs defaultValue="jd" className="flex-1 flex flex-col overflow-hidden">
         <TabsList className="w-full grid grid-cols-4 shrink-0 rounded-none border-b bg-transparent h-auto p-0">
@@ -455,6 +506,7 @@ export function ApplicationDetailDrawer({
 
   const handleSubmitApplication = async () => {
     if (!currentApplication) return;
+    if (!window.confirm("確認你已在職缺原頁檢查資料並親自送出申請？")) return;
     const updatedAt = new Date().toISOString();
     await updateJobApplication(currentApplication.id, { status: "applied", applied_at: updatedAt });
     const updatedApp = { ...currentApplication, status: "applied" as const, applied_at: updatedAt, updated_at: updatedAt };

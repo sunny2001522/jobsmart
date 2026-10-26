@@ -12,7 +12,7 @@ The product is designed for the **Personal AI / Apps & Agentic AI** direction:
 - an agent loop of retrieve → reason → reflect → propose;
 - a server-only adapter for Nebius Token Factory and an NVIDIA Nemotron model;
 - deterministic fallback data so judges can test the working web demo without credentials;
-- existing integrations for JD parsing, resume versions, interview transcription/evaluation, Gmail and Supabase.
+- existing integrations for JD parsing, resume versions, interview transcription/evaluation, Gmail and Turso.
 
 The first demo screen is [`/copilot`](http://localhost:3004/copilot). It is intentionally a small, complete product loop rather than a collection of isolated AI buttons.
 
