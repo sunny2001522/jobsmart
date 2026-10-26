@@ -51,6 +51,14 @@ export function ApplicationCard({
     ? Math.round(application.value_scores.weightedScore)
     : 5;
 
+  const legacyLinkedInTitle = application.position.match(/^(.+?)\s+at\s+(.+?)(?:\s+[—|-].*)?$/i);
+  const displayPosition = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name)
+    ? legacyLinkedInTitle[1].trim()
+    : application.position;
+  const displayCompany = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name)
+    ? legacyLinkedInTitle[2].trim()
+    : (/linkedin\.com/i.test(application.company_name) ? "LinkedIn 職缺" : application.company_name);
+
   const handleCardClick = (e: React.MouseEvent) => {
     // 避免在拖曳時觸發
     if (isDragging || isSortableDragging) return;
@@ -83,11 +91,11 @@ export function ApplicationCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <h4 className="font-medium text-sm break-words">
-                  {application.company_name}
+                <h4 className="font-medium text-sm text-muted-foreground break-words">
+                  {displayPosition}
                 </h4>
                 <p className="text-xs text-muted-foreground break-words">
-                  {application.position}
+                  {displayCompany}
                 </p>
               </div>
               {application.jd_url && (

@@ -19,7 +19,8 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
 import { ApplicationCard } from "@/components/kanban/application-card";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Eye, EyeOff } from "lucide-react";
+import { Plus, Loader2, Eye, EyeOff, Sparkles, MoreHorizontal, Trash2, Check } from "lucide-react";
+import Link from "next/link";
 import { AddApplicationDialog } from "@/components/kanban/add-application-dialog";
 import { JobCategoryTabs } from "@/components/job-category-tabs";
 import { useJobCategoryContext } from "@/contexts/job-category-context";
@@ -53,6 +54,10 @@ export default function ApplicationsPage() {
   const [addDialogStatus, setAddDialogStatus] = useState<ApplicationStatus>("wishlist");
   const [showAllSummaries, setShowAllSummaries] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [automationRunning, setAutomationRunning] = useState(false);
+  const [automationSettings, setAutomationSettings] = useState({ enabled: false, frequency: "daily", mode: "review", query: "AI product manager", nextRunAt: null as string | null });
+  const [jobLeads, setJobLeads] = useState<Array<{ id: string; company: string; role: string; url: string; source: string; status: string; snippet: string }>>([]);
+  const [linkedinStatus, setLinkedinStatus] = useState("disconnected");
 
   const { selectedCategoryId } = useJobCategoryContext();
   const isMobile = useIsMobile();
@@ -114,9 +119,45 @@ export default function ApplicationsPage() {
     }
   }, []);
 
+  const loadAutomation = useCallback(async () => {
+    try {
+      const [settingsResponse, queueResponse, linkedinResponse] = await Promise.all([fetch("/api/automation/settings"), fetch("/api/automation/queue"), fetch("/api/integrations/linkedin")]);
+      if (settingsResponse.ok) setAutomationSettings((await settingsResponse.json()).data);
+      if (queueResponse.ok) {
+        const rows = (await queueResponse.json()).data as typeof jobLeads;
+        setJobLeads(rows.filter((lead, index, all) => all.findIndex((item) => item.url === lead.url) === index));
+      }
+      if (linkedinResponse.ok) setLinkedinStatus(String((await linkedinResponse.json()).data.status));
+    } catch (error) { console.error("Failed to load automation:", error); }
+  }, []);
+
   useEffect(() => {
     loadApplications();
-  }, [loadApplications]);
+    loadAutomation();
+  }, [loadApplications, loadAutomation]);
+
+  const runAutomation = async () => {
+    setAutomationRunning(true);
+    try { await fetch("/api/automation/run", { method: "POST" }); await loadAutomation(); }
+    finally { setAutomationRunning(false); }
+  };
+
+  const saveAutomation = async (next: typeof automationSettings) => {
+    setAutomationSettings(next);
+    await fetch("/api/automation/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
+  };
+
+  const approveLead = async (id: string) => { await fetch(`/api/automation/queue/${id}/approve`, { method: "POST" }); await Promise.all([loadAutomation(), loadApplications()]); };
+  const deleteLead = async (id: string) => { await fetch(`/api/automation/queue?id=${encodeURIComponent(id)}`, { method: "DELETE" }); setJobLeads((prev) => prev.filter((lead) => lead.id !== id)); };
+  const connectLinkedIn = async () => {
+    if (linkedinStatus === "pending") {
+      const response = await fetch("/api/integrations/linkedin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "connected", accountLabel: "LinkedIn Companion" }) });
+      if (response.ok) setLinkedinStatus("connected");
+      return;
+    }
+    window.open("https://www.linkedin.com/login", "_blank", "noopener,noreferrer");
+    setLinkedinStatus("pending");
+  };
 
   const handleStatusChange = async (applicationId: string, newStatus: ApplicationStatus) => {
     // 樂觀更新 UI
@@ -326,6 +367,13 @@ export default function ApplicationsPage() {
     );
   }
 
+  const pendingLeads = jobLeads.filter((lead) => lead.status === "queued");
+  const queueCards = pendingLeads.length > 0 ? (
+    <div className="mb-3 space-y-2" aria-label="搶投職缺">
+      {pendingLeads.slice(0, 5).map((lead) => <div key={lead.id} className="rounded-lg border bg-card p-3 shadow-sm"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-medium text-muted-foreground">{lead.role}</p><p className="truncate text-xs text-muted-foreground">{lead.company}</p></div><details className="relative"><summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded hover:bg-muted" aria-label="更多操作"><MoreHorizontal className="h-3.5 w-3.5" /></summary><div className="absolute right-0 z-10 mt-1 w-24 rounded border bg-popover p-1 shadow"><button aria-label="刪除職缺" className="flex w-full items-center gap-1 rounded px-1.5 py-1 text-left text-[10px] text-destructive hover:bg-muted" onClick={() => deleteLead(lead.id)}><Trash2 className="h-3 w-3" />刪除</button></div></details></div><Button size="sm" variant="outline" className="mt-2 h-7 w-full text-[11px]" onClick={() => approveLead(lead.id)}><Check className="mr-1 h-3 w-3" />同意並開始修改</Button></div>)}
+    </div>
+  ) : null;
+
   return (
     <DndContext
       sensors={sensors}
@@ -342,7 +390,11 @@ export default function ApplicationsPage() {
               追蹤你的求職進度，從想投到拿到 Offer
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button size="sm" onClick={runAutomation} disabled={automationRunning}><Sparkles className="mr-1 h-4 w-4" />{automationRunning ? "搜尋中" : "AI 找職缺"}</Button>
+            <span className="text-xs text-muted-foreground">{automationSettings.mode === "auto" ? "自動" : "需同意"}</span>
+            <select aria-label="目前投遞模式" className="h-9 rounded-md border bg-transparent px-2 text-xs" value={automationSettings.mode} onChange={(e) => saveAutomation({ ...automationSettings, mode: e.target.value })}><option value="review">勾選後投</option><option value="ask">每步詢問</option><option value="auto">自動投遞</option></select>
+            <Button variant="outline" size="sm" onClick={connectLinkedIn}>{linkedinStatus === "connected" ? "LinkedIn 已連接" : linkedinStatus === "pending" ? "完成 LinkedIn 連線" : "連接 LinkedIn"}</Button>
             <Button
               variant="outline"
               size="icon"
@@ -370,6 +422,7 @@ export default function ApplicationsPage() {
           showSummaries={showAllSummaries}
           onApplicationUpdate={handleApplicationUpdate}
           onAddClick={handleAddClick}
+          firstColumnContent={queueCards}
         />
 
         <AddApplicationDialog

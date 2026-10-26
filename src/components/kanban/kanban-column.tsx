@@ -1,6 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
+import type { ReactNode } from "react";
 import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { ApplicationCard } from "./application-card";
@@ -16,9 +17,10 @@ interface KanbanColumnProps {
   onViewDetail?: (application: JobApplication) => void;
   onAddClick?: () => void;
   isMobile?: boolean;
+  topContent?: ReactNode;
 }
 
-export function KanbanColumn({ id, title, applications, selectedApplicationId, showSummaries = true, onViewDetail, onAddClick, isMobile = false }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, applications, selectedApplicationId, showSummaries = true, onViewDetail, onAddClick, isMobile = false, topContent }: KanbanColumnProps) {
   const { isOver, setNodeRef } = useDroppable({
     id,
   });
@@ -47,6 +49,8 @@ export function KanbanColumn({ id, title, applications, selectedApplicationId, s
           <Plus className="h-4 w-4" />
         </button>
       </div>
+
+      {topContent}
 
       <SortableContext
         items={applications.map((app) => app.id)}

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,24 +33,11 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name,
-          },
-        },
-      });
-
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-
-      toast.success("註冊成功！請檢查你的 Email 進行驗證。");
-      router.push("/login");
+      const response = await fetch("/api/auth/local/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, password }) });
+      const result = await response.json();
+      if (!response.ok) { toast.error(result.error || "註冊失敗"); return; }
+      toast.success("註冊成功！");
+      router.push("/dashboard");
     } catch {
       toast.error("註冊時發生錯誤");
     } finally {
@@ -62,17 +48,7 @@ export default function RegisterPage() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?redirectTo=/dashboard`,
-        },
-      });
-
-      if (error) {
-        toast.error(error.message);
-      }
+      toast.info("Google 登入將在 GCP OAuth 設定完成後啟用");
     } catch {
       toast.error("註冊時發生錯誤");
     } finally {

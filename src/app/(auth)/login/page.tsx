@@ -3,7 +3,6 @@
 import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,19 +21,10 @@ function LoginForm() {
 
   // 開發環境自動登入
   useEffect(() => {
-    if (
-      process.env.NODE_ENV === "development" &&
-      process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_EMAIL &&
-      process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_PASSWORD
-    ) {
+    if (process.env.NODE_ENV === "development") {
       const autoLogin = async () => {
-        const supabase = createClient();
-        const { error } = await supabase.auth.signInWithPassword({
-          email: process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_EMAIL!,
-          password: process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN_PASSWORD!,
-        });
-
-        if (!error) {
+        const response = await fetch("/api/auth/local/dev-login", { method: "POST" });
+        if (response.ok) {
           router.push(redirectTo);
           router.refresh();
         }
@@ -48,16 +38,9 @@ function LoginForm() {
     setIsLoading(true);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
+      const response = await fetch("/api/auth/local/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+      const result = await response.json();
+      if (!response.ok) { toast.error(result.error || "登入失敗"); return; }
 
       toast.success("登入成功！");
       router.push(redirectTo);
@@ -72,17 +55,7 @@ function LoginForm() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?redirectTo=${redirectTo}`,
-        },
-      });
-
-      if (error) {
-        toast.error(error.message);
-      }
+      toast.info("Google 登入將在 GCP OAuth 設定完成後啟用");
     } catch {
       toast.error("登入時發生錯誤");
     } finally {

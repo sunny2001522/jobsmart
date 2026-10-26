@@ -11,6 +11,7 @@ import {
   Heart,
   Settings,
   LogOut,
+  Orbit,
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,6 +34,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const mainNavItems = [
+  {
+    title: "Copilot 工作台",
+    href: "/copilot",
+    icon: Orbit,
+  },
   {
     title: "總覽",
     href: "/dashboard",
@@ -145,6 +151,12 @@ export function AppSidebar() {
               <Link href="/settings" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
                 設定
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/settings/linkedin" className="flex items-center gap-2">
+                <Orbit className="h-4 w-4" />
+                LinkedIn 自動同步
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem className="text-destructive">

@@ -11,6 +11,7 @@ import {
   Heart,
   Sparkles,
   ArrowRight,
+  Orbit,
 } from "lucide-react";
 
 const features = [
@@ -76,21 +77,21 @@ export default function LandingPage() {
           AI 驅動的求職助手
         </Badge>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-          讓求職變得更聰明
+          讓 AI 主動幫你找到下一份工作
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-          從履歷優化到面試準備，JobSmart 幫助你在求職路上更有效率。
-          追蹤申請進度、分析公司評價、AI 練習面試，一站搞定。
+          JobSmart Copilot 會找出值得投遞的機會，針對每個 JD 客製履歷，並在面試錄影後告訴你下一個可以變好的地方。
         </p>
         <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
           <Button size="lg" asChild>
-            <Link href="/register">
-              免費開始使用
+            <Link href="/copilot">
+              <Orbit className="mr-2 h-4 w-4" />
+              開啟 Copilot 工作台
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
           <Button size="lg" variant="outline" asChild>
-            <Link href="/login">已有帳號？登入</Link>
+            <Link href="/copilot">先看互動 Demo</Link>
           </Button>
         </div>
       </section>

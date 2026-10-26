@@ -31,8 +31,8 @@ export async function searchGoogle(
 ): Promise<GoogleSearchResult[]> {
   const { site, limit = 10 } = options ?? {};
 
-  const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
-  const engineId = process.env.GOOGLE_SEARCH_ENGINE_ID;
+  const apiKey = process.env.GOOGLE_SEARCH_API_KEY || process.env.GOOGLE_API_KEY;
+  const engineId = process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID;
 
   if (!apiKey || !engineId) {
     console.warn("Google Search API credentials not configured");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { KanbanColumn } from "./kanban-column";
 import { ApplicationDetailDrawer } from "./application-detail-drawer";
@@ -13,9 +14,10 @@ interface KanbanBoardProps {
   showSummaries?: boolean;
   onApplicationUpdate?: (updatedApplication: JobApplication) => void;
   onAddClick?: (status: ApplicationStatus) => void;
+  firstColumnContent?: ReactNode;
 }
 
-export function KanbanBoard({ applications, showSummaries = true, onApplicationUpdate, onAddClick }: KanbanBoardProps) {
+export function KanbanBoard({ applications, showSummaries = true, onApplicationUpdate, onAddClick, firstColumnContent }: KanbanBoardProps) {
   const isMobile = useIsMobile();
   const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -57,12 +59,13 @@ export function KanbanBoard({ applications, showSummaries = true, onApplicationU
               onViewDetail={handleViewDetail}
               onAddClick={() => onAddClick?.(status)}
               isMobile={isMobile}
+              topContent={status === KANBAN_COLUMNS[0] ? firstColumnContent : undefined}
             />
           ))}
         </div>
 
         {/* Desktop: inline panel / Mobile: drawer */}
-        {!isMobile && (
+        {!isMobile && selectedApplication && (
           <ApplicationDetailDrawer
             application={selectedApplication}
             open={true}

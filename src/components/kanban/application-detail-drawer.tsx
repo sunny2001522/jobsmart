@@ -11,7 +11,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { FileText } from "lucide-react";
+import { Check, FileText, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { JDSection } from "./drawer-sections/jd-section";
 import { ReviewsSection } from "./drawer-sections/reviews-section";
 import {
@@ -90,6 +91,7 @@ interface ApplicationDetailContentProps {
   interviewSourceResults?: Record<InterviewSource, InterviewSourceResult>;
   lastInterviewSearchedAt?: string;
   onSearchInterviews: () => Promise<void>;
+  onSubmitApplication: () => Promise<void>;
 }
 
 function ApplicationDetailContent({
@@ -110,17 +112,25 @@ function ApplicationDetailContent({
   interviewSourceResults,
   lastInterviewSearchedAt,
   onSearchInterviews,
+  onSubmitApplication,
 }: ApplicationDetailContentProps) {
+  const metadata = application as JobApplication & Record<string, unknown>;
+  const automationMode = String(metadata.automation_mode || "review");
+  const resumeStatus = String(metadata.resume_status || "ready");
+  const coverLetterStatus = String(metadata.cover_letter_status || "ready");
+  const legacyLinkedInTitle = application.position.match(/^(.+?)\s+at\s+(.+?)(?:\s+[—|-].*)?$/i);
+  const displayPosition = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name) ? legacyLinkedInTitle[1].trim() : application.position;
+  const displayCompany = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name) ? legacyLinkedInTitle[2].trim() : (/linkedin\.com/i.test(application.company_name) ? "LinkedIn 職缺" : application.company_name);
   return (
     <>
       <div className="p-4 border-b shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold truncate">
-              {application.company_name}
+              {displayPosition}
             </h3>
             <p className="text-sm text-muted-foreground truncate">
-              {application.position}
+              {displayCompany}
             </p>
           </div>
           <Badge variant="secondary">
@@ -128,6 +138,8 @@ function ApplicationDetailContent({
           </Badge>
         </div>
       </div>
+
+      {application.status === "editing" && <div className="border-b p-4"><div className="mb-3 flex items-center justify-between"><p className="text-sm font-medium">AI 投遞準備</p><span className="text-xs text-muted-foreground">{automationMode === "auto" ? "自動模式" : "等待同意"}</span></div><div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded border p-2"><p className="text-muted-foreground">履歷</p><p className="mt-1 flex items-center gap-1 font-medium">{resumeStatus === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}{resumeStatus === "generating" ? "AI 修改中" : "已準備"}</p></div><div className="rounded border p-2"><p className="text-muted-foreground">Cover Letter</p><p className="mt-1 flex items-center gap-1 font-medium">{coverLetterStatus === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}{coverLetterStatus === "generating" ? "AI 修改中" : "已準備"}</p></div></div>{automationMode === "auto" ? <p className="mt-3 text-xs text-primary">自動模式：AI 完成後會自動進入投遞流程。</p> : <Button className="mt-3 w-full" size="sm" onClick={onSubmitApplication}><Check className="mr-2 h-4 w-4" />可以投遞</Button>}</div>}
 
       <Tabs defaultValue="jd" className="flex-1 flex flex-col overflow-hidden">
         <TabsList className="w-full grid grid-cols-4 shrink-0 rounded-none border-b bg-transparent h-auto p-0">
@@ -441,6 +453,15 @@ export function ApplicationDetailDrawer({
     }
   };
 
+  const handleSubmitApplication = async () => {
+    if (!currentApplication) return;
+    const updatedAt = new Date().toISOString();
+    await updateJobApplication(currentApplication.id, { status: "applied", applied_at: updatedAt });
+    const updatedApp = { ...currentApplication, status: "applied" as const, applied_at: updatedAt, updated_at: updatedAt };
+    setCurrentApplication(updatedApp);
+    onApplicationUpdate?.(updatedApp);
+  };
+
   // Mobile: render as bottom Sheet
   if (isMobile) {
     if (!currentApplication) return null;
@@ -473,6 +494,7 @@ export function ApplicationDetailDrawer({
             interviewSourceResults={interviewSourceResults}
             lastInterviewSearchedAt={lastInterviewSearchedAt}
             onSearchInterviews={handleSearchInterviews}
+            onSubmitApplication={handleSubmitApplication}
           />
         </SheetContent>
       </Sheet>
@@ -504,6 +526,7 @@ export function ApplicationDetailDrawer({
         interviewSourceResults={interviewSourceResults}
         lastInterviewSearchedAt={lastInterviewSearchedAt}
         onSearchInterviews={handleSearchInterviews}
+        onSubmitApplication={handleSubmitApplication}
       />
     </div>
   );
