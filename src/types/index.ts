@@ -90,7 +90,8 @@ export interface Company {
 export interface CompanyReview {
   id: string;
   company_id: string;
-  source: 'dcard' | 'medium' | 'qollie' | 'ptt' | 'manual';
+  company_name?: string;
+  source: 'dcard' | 'medium' | 'qollie' | 'ptt' | 'glassdoor' | 'indeed' | 'comparably' | 'manual';
   source_url: string | null;
   title: string | null;
   content: string;
@@ -343,6 +344,7 @@ export interface VersionJobResume {
     suggestions?: string[];
     strongVerbs?: string[];
     improvements?: string[];
+    audit?: { status: "passed" | "needs_attention"; summary: string; findings: Array<{ claim: string; status: "supported" | "exaggerated" | "unsupported"; evidence: string; reason: string }>; requirements: Array<{ requirement: string; priority: "required" | "preferred"; evidence: string; status: "supported" | "partial" | "missing" }> };
   } | null;
   display_order: number;
   notes: string | null;

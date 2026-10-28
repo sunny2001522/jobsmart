@@ -61,6 +61,7 @@ export const getCustomizedResumesForJob = (jobId: string) => call<(VersionJobRes
 export const getVersionJobResumes = (versionId: string) => call<(VersionJobResume & { job_application: JobApplication })[]>("getVersionJobResumes", [versionId]);
 
 export const getCompanyReviewsByName = (companyName: string) => call<CompanyReview[]>("getCompanyReviewsByName", [companyName]);
+export const createCompanyReview = (review: Omit<CompanyReview, "id" | "created_at"> & { company_name?: string }) => call<CompanyReview | null>("createCompanyReview", [review]);
 export const getJobCategories = () => call<JobCategory[]>("getJobCategories");
 export const getJobCategory = (id: string) => call<JobCategory | null>("getJobCategory", [id]);
 export const createJobCategory = (category: Omit<JobCategoryInsert, "user_id">) => call<JobCategory | null>("createJobCategory", [category]);

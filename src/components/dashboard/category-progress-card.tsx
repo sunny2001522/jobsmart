@@ -5,9 +5,11 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart3, FolderKanban } from "lucide-react";
 import { useCategoryStats } from "@/hooks";
+import { useI18n } from "@/contexts/i18n-context";
 
 export function CategoryProgressCard() {
   const { stats, totals, isLoading, error } = useCategoryStats();
+  const { t } = useI18n();
 
   if (isLoading) {
     return (
@@ -15,9 +17,9 @@ export function CategoryProgressCard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            各類別進度
+            {t("categories.progressTitle")}
           </CardTitle>
-          <CardDescription>按職位類別查看求職進度分布</CardDescription>
+          <CardDescription>{t("categories.progressDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -40,16 +42,16 @@ export function CategoryProgressCard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            各類別進度
+            {t("categories.progressTitle")}
           </CardTitle>
-          <CardDescription>按職位類別查看求職進度分布</CardDescription>
+          <CardDescription>{t("categories.progressDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
             <FolderKanban className="h-8 w-8 mb-2" />
-            <p className="text-sm">還沒有建立職位類別</p>
+            <p className="text-sm">{t("categories.emptyTitle")}</p>
             <p className="text-xs mt-1">
-              在求職追蹤頁面建立類別來分組管理職位
+              {t("categories.emptyDescription")}
             </p>
           </div>
         </CardContent>
@@ -62,10 +64,10 @@ export function CategoryProgressCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5" />
-          各類別進度
+          {t("categories.progressTitle")}
         </CardTitle>
         <CardDescription>
-          按職位類別查看求職進度分布（共 {totals.total} 個職位）
+          {t("categories.total", { count: totals.total })}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -88,7 +90,7 @@ export function CategoryProgressCard() {
                     <span className="font-medium text-sm">{stat.category_name}</span>
                   </div>
                   <span className="text-sm text-muted-foreground">
-                    {stat.total} 個
+                    {t("dashboard.categoryCount", { count: stat.total })}
                   </span>
                 </div>
 
@@ -97,19 +99,19 @@ export function CategoryProgressCard() {
                 <div className="flex gap-3 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-gray-400" />
-                    想投 {stat.wishlist}
+                    {t("dashboard.categoryWishlist", { count: stat.wishlist })}
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-blue-500" />
-                    已投 {stat.applied}
+                    {t("dashboard.categoryApplied", { count: stat.applied })}
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-purple-500" />
-                    面試 {stat.interviews}
+                    {t("dashboard.categoryInterviews", { count: stat.interviews })}
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-green-500" />
-                    Offer {stat.offers}
+                    {t("dashboard.categoryOffers", { count: stat.offers })}
                   </span>
                 </div>
               </div>

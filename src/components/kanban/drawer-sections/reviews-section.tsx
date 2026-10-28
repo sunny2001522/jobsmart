@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import {
   MessageSquare,
   ThumbsUp,
@@ -11,14 +12,15 @@ import {
   ThumbsDown,
   Search,
   Loader2,
-  ExternalLink,
   CheckCircle,
   XCircle,
   Clock,
+  Plus,
 } from "lucide-react";
 import type { CompanyReview } from "@/types";
+import { useI18n } from "@/contexts/i18n-context";
 
-type ReviewSource = "dcard" | "qollie" | "ptt" | "medium";
+type ReviewSource = "dcard" | "qollie" | "ptt" | "medium" | "glassdoor" | "indeed" | "comparably";
 
 interface SourceResult {
   success: boolean;
@@ -34,9 +36,23 @@ interface ReviewsSectionProps {
   lastSearchedAt?: string;
   onSearchReviews?: () => Promise<void>;
   isSearching?: boolean;
+  onAddReview?: (review: { title: string; content: string; sentiment: "positive" | "neutral" | "negative" }) => Promise<void>;
 }
 
-const ALL_SOURCES: ReviewSource[] = ["qollie", "dcard", "ptt", "medium"];
+const ALL_SOURCES: ReviewSource[] = ["glassdoor", "indeed", "comparably", "qollie", "dcard", "ptt", "medium"];
+
+function cleanReviewContent(content: string): string {
+  return content.replace(/https?:\/\/\S+|www\.\S+/gi, "").replace(/employee reviews at .*?\.(?=\s|$)/gi, "").replace(/like\.\s*\d+\s*[·•-]?\s*avatar/gi, "").replace(/\s+/g, " ").trim();
+}
+
+function shouldShowReviewTitle(title: string | null | undefined): boolean {
+  return Boolean(title && !/working at .*glassdoor|^glassdoor$/i.test(title.trim()));
+}
+
+function buildReviewSummary(reviews: CompanyReview[], isEnglish: boolean): string {
+  const sentences = reviews.flatMap((review) => cleanReviewContent(review.content).split(/(?<=[.!?。！？])\s+/)).map((sentence) => sentence.trim()).filter((sentence) => sentence.length >= 18).filter((sentence) => !/employee reviews|newsweek|avatar|www\./i.test(sentence));
+  return sentences.length ? sentences.slice(0, 2).join(" ") : (isEnglish ? "No clear review summary is available yet." : "目前還沒有足夠內容整理評論摘要。");
+}
 
 export function ReviewsSection({
   reviews,
@@ -46,14 +62,39 @@ export function ReviewsSection({
   lastSearchedAt,
   onSearchReviews,
   isSearching,
+  onAddReview,
 }: ReviewsSectionProps) {
+  const { locale } = useI18n();
+  const isEnglish = locale === "en";
+  const companyToken = (companyName || "").replace(/linkedin\s*(job|職缺)/gi, "").trim().split(/\s+/)[0].toLowerCase();
+  const matchingReviews = companyToken ? reviews.filter((review) => `${review.title || ""} ${review.content}`.toLowerCase().includes(companyToken)) : reviews;
+  const visibleReviews = matchingReviews.length > 0 ? matchingReviews : reviews;
   const [activeSource, setActiveSource] = useState<"all" | ReviewSource>("all");
+  const [isAddingReview, setIsAddingReview] = useState(false);
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualContent, setManualContent] = useState("");
+  const [manualSentiment, setManualSentiment] = useState<"positive" | "neutral" | "negative">("neutral");
+  const [isSavingReview, setIsSavingReview] = useState(false);
+
+  const submitManualReview = async () => {
+    if (!onAddReview || !manualContent.trim()) return;
+    setIsSavingReview(true);
+    try {
+      await onAddReview({ title: manualTitle.trim(), content: manualContent.trim(), sentiment: manualSentiment });
+      setManualTitle("");
+      setManualContent("");
+      setManualSentiment("neutral");
+      setIsAddingReview(false);
+    } finally {
+      setIsSavingReview(false);
+    }
+  };
 
   // 過濾評論
   const filteredReviews =
     activeSource === "all"
-      ? reviews
-      : reviews.filter((r) => r.source === activeSource);
+      ? visibleReviews
+      : visibleReviews.filter((r) => r.source === activeSource);
 
   // 統計評論情緒
   const stats = filteredReviews.reduce(
@@ -67,7 +108,7 @@ export function ReviewsSection({
   );
 
   // 計算每個來源的評論數
-  const sourceCounts = reviews.reduce(
+  const sourceCounts = visibleReviews.reduce(
     (acc, review) => {
       const source = review.source as ReviewSource;
       if (ALL_SOURCES.includes(source)) {
@@ -104,9 +145,12 @@ export function ReviewsSection({
     const labels: Record<string, string> = {
       dcard: "Dcard",
       medium: "Medium",
-      qollie: "求職天眼通",
+      qollie: isEnglish ? "Qollie" : "求職天眼通",
       ptt: "PTT",
-      manual: "手動添加",
+      manual: isEnglish ? "Manual" : "手動添加",
+      glassdoor: "Glassdoor",
+      indeed: "Indeed",
+      comparably: "Comparably",
     };
     return labels[source] || source;
   };
@@ -117,7 +161,10 @@ export function ReviewsSection({
       medium: "Medium",
       qollie: "Qollie",
       ptt: "PTT",
-      all: "全部",
+      glassdoor: "Glassdoor",
+      indeed: "Indeed",
+      comparably: "Comparably",
+      all: isEnglish ? "All" : "全部",
     };
     return labels[source] || source;
   };
@@ -147,7 +194,7 @@ export function ReviewsSection({
               ) : (
                 <Search className="h-4 w-4 mr-2" />
               )}
-              {isSearching ? "搜尋中..." : "搜尋公司評論"}
+              {isSearching ? (isEnglish ? "Searching..." : "搜尋中...") : (isEnglish ? "Search company reviews" : "搜尋公司評論")}
             </Button>
           )}
         </div>
@@ -155,8 +202,8 @@ export function ReviewsSection({
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />
             <span>
-              更新於{" "}
-              {new Date(lastSearchedAt).toLocaleDateString("zh-TW", {
+              {isEnglish ? "Updated " : "更新於 "}
+              {new Date(lastSearchedAt).toLocaleDateString(isEnglish ? "en-US" : "zh-TW", {
                 month: "short",
                 day: "numeric",
                 hour: "2-digit",
@@ -165,12 +212,47 @@ export function ReviewsSection({
             </span>
           </div>
         )}
+        {onAddReview && (
+          <Button variant="outline" size="sm" onClick={() => setIsAddingReview((value) => !value)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            {isEnglish ? "Add review" : "手動新增評論"}
+          </Button>
+        )}
       </div>
+
+      {isAddingReview && onAddReview && (
+        <Card>
+          <CardContent className="space-y-2 p-3">
+            <input
+              value={manualTitle}
+              onChange={(event) => setManualTitle(event.target.value)}
+              placeholder={isEnglish ? "Title (optional)" : "標題（選填）"}
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+            />
+            <Textarea
+              value={manualContent}
+              onChange={(event) => setManualContent(event.target.value)}
+              placeholder={isEnglish ? "Paste or write a company review..." : "貼上或輸入公司評論..."}
+              rows={4}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <select value={manualSentiment} onChange={(event) => setManualSentiment(event.target.value as typeof manualSentiment)} className="h-8 rounded-md border bg-background px-2 text-xs">
+                <option value="positive">{isEnglish ? "Positive" : "正面"}</option>
+                <option value="neutral">{isEnglish ? "Neutral" : "中性"}</option>
+                <option value="negative">{isEnglish ? "Negative" : "負面"}</option>
+              </select>
+              <Button size="sm" onClick={() => void submitManualReview()} disabled={!manualContent.trim() || isSavingReview}>
+                {isSavingReview ? (isEnglish ? "Saving..." : "儲存中...") : (isEnglish ? "Save and score" : "儲存並算分")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 搜尋進度 */}
       {isSearching && sourceResults && (
         <div className="p-3 bg-muted/50 rounded-lg space-y-2">
-          <p className="text-sm font-medium">正在搜尋評論...</p>
+          <p className="text-sm font-medium">{isEnglish ? "Searching reviews..." : "正在搜尋評論..."}</p>
           <div className="grid grid-cols-2 gap-2">
             {ALL_SOURCES.map((source) => {
               const result = sourceResults[source];
@@ -189,7 +271,7 @@ export function ReviewsSection({
                   <span>{getSourceLabel(source)}</span>
                   {result && (
                     <span className="text-muted-foreground">
-                      ({result.count} 則)
+                      ({result.count} {isEnglish ? "reviews" : "則"})
                     </span>
                   )}
                 </div>
@@ -200,7 +282,7 @@ export function ReviewsSection({
       )}
 
       {/* 來源篩選 */}
-      {reviews.length > 0 && (
+      {visibleReviews.length > 0 && (
         <div className="flex flex-wrap gap-1">
           <Button
             variant={activeSource === "all" ? "default" : "outline"}
@@ -208,7 +290,7 @@ export function ReviewsSection({
             className="h-7 text-xs"
             onClick={() => setActiveSource("all")}
           >
-            全部 ({reviews.length})
+            {getSourceShortLabel("all")} ({visibleReviews.length})
           </Button>
           {ALL_SOURCES.map((source) => {
             const count = sourceCounts[source] || 0;
@@ -229,12 +311,21 @@ export function ReviewsSection({
       )}
 
       {/* 空狀態 */}
-      {(!reviews || reviews.length === 0) && !isSearching && (
+      {(!visibleReviews || visibleReviews.length === 0) && !isSearching && (
         <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
           <MessageSquare className="h-8 w-8 mb-2" />
-          <p className="text-sm">尚無公司評論</p>
-          <p className="text-xs">點擊「搜尋公司評論」按鈕開始搜尋</p>
+          <p className="text-sm">{isEnglish ? "No company reviews yet" : "尚無公司評論"}</p>
+          <p className="text-xs">{isEnglish ? "Click Search company reviews to begin" : "點擊「搜尋公司評論」按鈕開始搜尋"}</p>
         </div>
+      )}
+
+      {visibleReviews.length > 0 && (
+        <Card className="bg-muted/40">
+          <CardContent className="p-3">
+            <p className="mb-1 text-xs font-semibold">{isEnglish ? "AI review summary" : "AI 評論摘要"}</p>
+            <p className="text-sm leading-6 text-muted-foreground">{buildReviewSummary(visibleReviews, isEnglish)}</p>
+          </CardContent>
+        </Card>
       )}
 
       {/* 統計概覽 */}
@@ -243,17 +334,17 @@ export function ReviewsSection({
           <div className="flex items-center gap-1.5">
             <ThumbsUp className="h-4 w-4 text-green-500" />
             <span className="text-sm font-medium">{stats.positive}</span>
-            <span className="text-xs text-muted-foreground">正面</span>
+            <span className="text-xs text-muted-foreground">{isEnglish ? "Positive" : "正面"}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Minus className="h-4 w-4 text-yellow-500" />
             <span className="text-sm font-medium">{stats.neutral}</span>
-            <span className="text-xs text-muted-foreground">中性</span>
+            <span className="text-xs text-muted-foreground">{isEnglish ? "Neutral" : "中性"}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <ThumbsDown className="h-4 w-4 text-red-500" />
             <span className="text-sm font-medium">{stats.negative}</span>
-            <span className="text-xs text-muted-foreground">負面</span>
+            <span className="text-xs text-muted-foreground">{isEnglish ? "Negative" : "負面"}</span>
           </div>
         </div>
       )}
@@ -270,7 +361,7 @@ export function ReviewsSection({
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     {getSentimentIcon(review.sentiment)}
-                    {review.title && (
+                    {shouldShowReviewTitle(review.title) && (
                       <span className="text-sm font-medium line-clamp-1">
                         {review.title}
                       </span>
@@ -280,25 +371,14 @@ export function ReviewsSection({
                     <Badge variant="outline" className="text-xs">
                       {getSourceShortLabel(review.source)}
                     </Badge>
-                    {review.source_url && (
-                      <a
-                        href={review.source_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground line-clamp-3">
-                  {review.content}
+                <p className="text-sm text-muted-foreground break-words">
+                  {cleanReviewContent(review.content)}
                 </p>
                 {review.published_at && (
                   <p className="text-xs text-muted-foreground mt-2">
-                    {new Date(review.published_at).toLocaleDateString("zh-TW")}
+                    {new Date(review.published_at).toLocaleDateString(isEnglish ? "en-US" : "zh-TW")}
                   </p>
                 )}
               </CardContent>

@@ -1,6 +1,6 @@
 // 價值觀到評論關鍵詞的映射
 export const VALUE_KEYWORD_MAP: Record<string, string[]> = {
-  salary: ["薪水", "待遇", "年薪", "獎金", "分紅", "薪資", "月薪", "收入", "pay", "salary"],
+  salary: ["薪水", "待遇", "年薪", "獎金", "分紅", "薪資", "月薪", "收入", "pay", "salary", "compensation", "benefits"],
   growth: ["升遷", "成長", "學習", "培訓", "發展", "晉升", "進修", "學到", "成長空間"],
   balance: [
     "準時下班",
@@ -14,6 +14,7 @@ export const VALUE_KEYWORD_MAP: Record<string, string[]> = {
     "加班少",
   ],
   team: ["同事", "團隊", "氛圍", "相處", "合作", "夥伴", "工作環境", "團隊氣氛"],
+  teamwork: ["同事", "團隊", "氛圍", "相處", "合作", "夥伴", "工作環境", "團隊氣氛", "team", "collaboration"],
   stability: ["穩定", "不裁員", "長久", "福利", "保障", "穩定性", "job security"],
   autonomy: ["自主", "彈性", "自己決定", "不微管理", "獨立", "自由度", "空間"],
   impact: ["影響力", "意義", "貢獻", "社會", "價值", "使命", "有意義的工作"],

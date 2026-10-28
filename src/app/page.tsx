@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,47 +9,45 @@ import {
   Kanban,
   Building2,
   Mic,
-  Linkedin,
   Heart,
   Sparkles,
   ArrowRight,
-  Orbit,
 } from "lucide-react";
+import { useI18n } from "@/contexts/i18n-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 const features = [
   {
     icon: Kanban,
-    title: "求職追蹤看板",
-    description: "Kanban 風格的追蹤系統，從想投到收到 Offer 一目了然",
+    titleKey: "landing.feature.tracking",
+    descriptionKey: "landing.feature.trackingDescription",
   },
   {
     icon: FileText,
-    title: "AI 履歷優化",
-    description: "根據 JD 關鍵字自動優化履歷，生成 ATS 友善格式",
+    titleKey: "landing.feature.resume",
+    descriptionKey: "landing.feature.resumeDescription",
   },
   {
     icon: Building2,
-    title: "公司評價爬蟲",
-    description: "自動爬取 Dcard、職場天眼通等平台的公司評論",
+    titleKey: "landing.feature.reviews",
+    descriptionKey: "landing.feature.reviewsDescription",
   },
   {
     icon: Mic,
-    title: "面試練習",
-    description: "錄音練習面試，AI 即時評分並給出改進建議",
-  },
-  {
-    icon: Linkedin,
-    title: "LinkedIn 生成",
-    description: "統計熱門技能關鍵字，生成專業的 LinkedIn 經歷描述",
+    titleKey: "landing.feature.interview",
+    descriptionKey: "landing.feature.interviewDescription",
   },
   {
     icon: Heart,
-    title: "價值觀探索",
-    description: "透過卡牌排序，了解自己最重視的工作價值",
+    titleKey: "landing.feature.values",
+    descriptionKey: "landing.feature.valuesDescription",
   },
-];
+] satisfies { icon: typeof Kanban; titleKey: MessageKey; descriptionKey: MessageKey }[];
 
 export default function LandingPage() {
+  const { t } = useI18n();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -59,12 +59,13 @@ export default function LandingPage() {
             </div>
             <span className="font-semibold text-lg">JobSmart</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher className="w-[42px] px-2 sm:w-[118px] sm:px-3" compactOnMobile />
             <Button variant="ghost" asChild>
-              <Link href="/login">登入</Link>
+              <Link href="/login">{t("landing.signIn")}</Link>
             </Button>
             <Button asChild>
-              <Link href="/register">免費註冊</Link>
+              <Link href="/register">{t("landing.signUp")}</Link>
             </Button>
           </div>
         </div>
@@ -74,24 +75,23 @@ export default function LandingPage() {
       <section className="container mx-auto px-4 py-24 text-center">
         <Badge className="mb-4" variant="secondary">
           <Sparkles className="h-3 w-3 mr-1" />
-          AI 驅動的求職助手
+          {t("landing.badge")}
         </Badge>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-          讓 AI 主動幫你找到下一份工作
+          {t("landing.heroTitle")}
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-          JobSmart Copilot 會找出值得投遞的機會，針對每個 JD 客製履歷，並在面試錄影後告訴你下一個可以變好的地方。
+          {t("landing.heroDescription")}
         </p>
         <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
           <Button size="lg" asChild>
-            <Link href="/copilot">
-              <Orbit className="mr-2 h-4 w-4" />
-              開啟 Copilot 工作台
+            <Link href="/applications">
+              {t("landing.openApplications")}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
           <Button size="lg" variant="outline" asChild>
-            <Link href="/copilot">先看互動 Demo</Link>
+            <Link href="/login">{t("landing.signIn")}</Link>
           </Button>
         </div>
       </section>
@@ -99,21 +99,21 @@ export default function LandingPage() {
       {/* Features Section */}
       <section className="container mx-auto px-4 py-24">
         <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold">功能特色</h2>
+          <h2 className="text-3xl font-bold">{t("landing.featureHeading")}</h2>
           <p className="mt-4 text-muted-foreground">
-            全方位的求職輔助工具
+            {t("landing.featureIntro")}
           </p>
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {features.map((feature) => (
-            <Card key={feature.title}>
+            <Card key={feature.titleKey}>
               <CardHeader>
                 <feature.icon className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>{feature.title}</CardTitle>
+                <CardTitle>{t(feature.titleKey)}</CardTitle>
               </CardHeader>
               <CardContent>
                 <CardDescription className="text-base">
-                  {feature.description}
+                  {t(feature.descriptionKey)}
                 </CardDescription>
               </CardContent>
             </Card>
@@ -124,13 +124,13 @@ export default function LandingPage() {
       {/* CTA Section */}
       <section className="border-t bg-muted/50">
         <div className="container mx-auto px-4 py-24 text-center">
-          <h2 className="text-3xl font-bold">準備好開始了嗎？</h2>
+          <h2 className="text-3xl font-bold">{t("landing.ctaTitle")}</h2>
           <p className="mt-4 text-muted-foreground">
-            免費註冊，立即開始使用 JobSmart
+            {t("landing.ctaDescription")}
           </p>
           <Button size="lg" className="mt-8" asChild>
             <Link href="/register">
-              免費開始使用
+              {t("landing.ctaButton")}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>

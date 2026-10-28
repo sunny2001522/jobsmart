@@ -18,7 +18,7 @@ export type ApplicationStatus =
   | "rejected"
   | "ghosted";
 
-export type ReviewSource = "dcard" | "medium" | "qollie" | "ptt" | "manual";
+export type ReviewSource = "dcard" | "medium" | "qollie" | "ptt" | "glassdoor" | "indeed" | "comparably" | "manual";
 export type Sentiment = "positive" | "neutral" | "negative";
 export type QuestionCategory =
   | "behavioral"
@@ -289,6 +289,7 @@ export interface VersionJobResume {
     suggestions?: string[];
     strongVerbs?: string[];
     improvements?: string[];
+    audit?: { status: "passed" | "needs_attention"; summary: string; findings: Array<{ claim: string; status: "supported" | "exaggerated" | "unsupported"; evidence: string; reason: string }>; requirements: Array<{ requirement: string; priority: "required" | "preferred"; evidence: string; status: "supported" | "partial" | "missing" }> };
   } | null;
   display_order: number;
   notes: string | null;

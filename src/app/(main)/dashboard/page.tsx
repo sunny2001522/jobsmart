@@ -21,9 +21,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useDashboard } from "@/hooks/use-dashboard";
+import { useI18n } from "@/contexts/i18n-context";
 
 export default function DashboardPage() {
   const { stats, recentActivity, weeklyGoals, responseRate, isLoading } = useDashboard();
+  const { locale, t } = useI18n();
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -41,19 +43,19 @@ export default function DashboardPage() {
   const getActivityText = (type: string) => {
     switch (type) {
       case "applied":
-        return "投遞了";
+        return t("dashboard.activity.applied");
       case "interview":
-        return "安排了面試";
+        return t("dashboard.activity.interview");
       case "offer":
-        return "收到 Offer";
+        return t("dashboard.activity.offer");
       default:
-        return "新增追蹤";
+        return t("dashboard.activity.new");
     }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString("zh-TW", {
+    return date.toLocaleDateString(locale, {
       month: "2-digit",
       day: "2-digit",
     });
@@ -63,13 +65,13 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">歡迎使用 JobSmart</h1>
-          <p className="text-muted-foreground">追蹤你的求職旅程，讓求職更有效率</p>
+          <h1 className="text-2xl font-bold">{t("dashboard.welcome")}</h1>
+          <p className="text-muted-foreground">{t("dashboard.subtitle")}</p>
         </div>
         <Button asChild>
           <Link href="/applications">
             <Plus className="h-4 w-4 mr-2" />
-            新增追蹤
+            {t("dashboard.addTracking")}
           </Link>
         </Button>
       </div>
@@ -78,7 +80,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">總追蹤數</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("dashboard.totalTracked")}</CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -88,7 +90,7 @@ export default function DashboardPage() {
               <>
                 <div className="text-2xl font-bold">{stats.totalApplications}</div>
                 <p className="text-xs text-muted-foreground">
-                  {stats.wishlist} 想投 · {stats.applied} 已投
+                  {t("dashboard.wishlistApplied", { wishlist: stats.wishlist, applied: stats.applied })}
                 </p>
               </>
             )}
@@ -97,7 +99,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">面試中</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("dashboard.interviewing")}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -107,7 +109,7 @@ export default function DashboardPage() {
               <>
                 <div className="text-2xl font-bold">{stats.interviews}</div>
                 <p className="text-xs text-muted-foreground">
-                  等待或進行中的面試
+                  {t("dashboard.activeInterviews")}
                 </p>
               </>
             )}
@@ -116,7 +118,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">收到 Offer</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("dashboard.offers")}</CardTitle>
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -126,7 +128,7 @@ export default function DashboardPage() {
               <>
                 <div className="text-2xl font-bold text-green-600">{stats.offers}</div>
                 <p className="text-xs text-muted-foreground">
-                  口頭或書面 Offer
+                  {t("dashboard.offerTypes")}
                 </p>
               </>
             )}
@@ -135,7 +137,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">回覆率</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("dashboard.responseRate")}</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -145,7 +147,7 @@ export default function DashboardPage() {
               <>
                 <div className="text-2xl font-bold">{responseRate}%</div>
                 <p className="text-xs text-muted-foreground">
-                  面試/申請比例
+                  {t("dashboard.interviewApplicationRatio")}
                 </p>
               </>
             )}
@@ -162,14 +164,14 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              本週目標
+              {t("dashboard.weeklyGoal")}
             </CardTitle>
-            <CardDescription>追蹤你的每週求職進度</CardDescription>
+            <CardDescription>{t("dashboard.weeklyGoalDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span>投遞申請</span>
+                <span>{t("dashboard.applications")}</span>
                 <span className="text-muted-foreground">
                   {weeklyGoals.applications.current} / {weeklyGoals.applications.target}
                 </span>
@@ -181,7 +183,7 @@ export default function DashboardPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span>面試場次</span>
+                <span>{t("dashboard.interviewSessions")}</span>
                 <span className="text-muted-foreground">
                   {weeklyGoals.interviews.current} / {weeklyGoals.interviews.target}
                 </span>
@@ -193,7 +195,7 @@ export default function DashboardPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span>面試練習</span>
+                <span>{t("dashboard.interviewPractice")}</span>
                 <span className="text-muted-foreground">
                   {weeklyGoals.practice.current} / {weeklyGoals.practice.target}
                 </span>
@@ -210,9 +212,9 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
-              最近活動
+              {t("dashboard.recentActivity")}
             </CardTitle>
-            <CardDescription>你最近的求職記錄</CardDescription>
+          <CardDescription>{t("dashboard.recentActivityDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -248,8 +250,8 @@ export default function DashboardPage() {
             ) : (
               <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
                 <Calendar className="h-8 w-8 mb-2" />
-                <p className="text-sm">還沒有任何活動</p>
-                <p className="text-xs mt-1">開始追蹤你的求職進度吧！</p>
+                <p className="text-sm">{t("dashboard.noActivity")}</p>
+                <p className="text-xs mt-1">{t("dashboard.startTracking")}</p>
               </div>
             )}
           </CardContent>
@@ -269,8 +271,8 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <h3 className="font-medium">求職追蹤</h3>
-              <p className="text-sm text-muted-foreground">管理你的求職進度</p>
+              <h3 className="font-medium">{t("dashboard.jobTracking")}</h3>
+              <p className="text-sm text-muted-foreground">{t("dashboard.manageProgress")}</p>
             </CardContent>
           </Link>
         </Card>
@@ -286,8 +288,8 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <h3 className="font-medium">履歷編輯</h3>
-              <p className="text-sm text-muted-foreground">建立 ATS 友善履歷</p>
+              <h3 className="font-medium">{t("dashboard.resumeEditing")}</h3>
+              <p className="text-sm text-muted-foreground">{t("dashboard.atsResume")}</p>
             </CardContent>
           </Link>
         </Card>
@@ -303,8 +305,8 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <h3 className="font-medium">面試練習</h3>
-              <p className="text-sm text-muted-foreground">AI 評分與建議</p>
+              <h3 className="font-medium">{t("dashboard.practiceInterview")}</h3>
+              <p className="text-sm text-muted-foreground">{t("dashboard.aiFeedback")}</p>
             </CardContent>
           </Link>
         </Card>
@@ -318,18 +320,15 @@ export default function DashboardPage() {
               <Sparkles className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold">AI 助手功能</h3>
+              <h3 className="font-semibold">{t("dashboard.aiAssistant")}</h3>
               <p className="text-sm text-muted-foreground">
-                使用 AI 優化履歷、分析 JD、練習面試
+                {t("dashboard.aiAssistantDescription")}
               </p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/linkedin">LinkedIn 生成</Link>
-            </Button>
             <Button size="sm" asChild>
-              <Link href="/interview">面試練習</Link>
+              <Link href="/interview">{t("dashboard.practiceInterview")}</Link>
             </Button>
           </div>
         </CardContent>

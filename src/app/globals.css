@@ -122,6 +122,25 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  button, a, input, textarea, select {
+    min-width: 0;
+  }
+
+  h1, h2, h3, h4, p, label, button, a {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Keep long localized labels and AI-generated content inside their cards. */
+.min-w-0 {
+  min-width: 0;
+}
+
+/* Horizontal scrollers must clip at the viewport instead of widening the app. */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Hide scrollbar utility */

@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -22,12 +21,18 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { useAudioRecorder, formatRecordingTime } from "@/hooks/use-audio-recorder";
+import { useI18n } from "@/contexts/i18n-context";
 
 // 預設問題
 const defaultQuestions = [
   { id: "1", question: "請簡單自我介紹" },
   { id: "2", question: "為什麼想加入我們公司？" },
   { id: "3", question: "描述一個你克服困難的經歷" },
+];
+const englishQuestions = [
+  { id: "1", question: "Tell me about yourself." },
+  { id: "2", question: "Why do you want to join our company?" },
+  { id: "3", question: "Describe a time you overcame a challenge." },
 ];
 
 interface EvaluationResult {
@@ -38,6 +43,8 @@ interface EvaluationResult {
 }
 
 function PracticeContent() {
+  const { locale } = useI18n();
+  const en = locale === "en";
   const searchParams = useSearchParams();
   const questionId = searchParams.get("q");
 
@@ -45,6 +52,9 @@ function PracticeContent() {
   const currentQuestion = questionId
     ? defaultQuestions.find((q) => q.id === questionId)
     : defaultQuestions[0];
+  const displayedQuestion = en
+    ? englishQuestions.find((question) => question.id === (currentQuestion?.id || "1")) || currentQuestion
+    : currentQuestion;
 
   const {
     isRecording,
@@ -90,7 +100,7 @@ function PracticeContent() {
 
       setTranscript(result.data.text);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "轉譯失敗");
+      setError(err instanceof Error ? err.message : en ? "Transcription failed. Please try again." : "轉譯失敗");
     } finally {
       setIsTranscribing(false);
     }
@@ -98,7 +108,7 @@ function PracticeContent() {
 
   const handleEvaluate = async () => {
     if (!transcript.trim()) {
-      setError("請先錄音或輸入回答內容");
+      setError(en ? "Record or enter an answer first." : "請先錄音或輸入回答內容");
       return;
     }
 
@@ -110,7 +120,7 @@ function PracticeContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          question: currentQuestion?.question || "",
+          question: displayedQuestion?.question || "",
           answer: transcript,
         }),
       });
@@ -123,7 +133,7 @@ function PracticeContent() {
 
       setEvaluation(result.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "評分失敗");
+      setError(err instanceof Error ? err.message : en ? "Scoring failed. Please try again." : "評分失敗");
     } finally {
       setIsEvaluating(false);
     }
@@ -148,7 +158,7 @@ function PracticeContent() {
         <Button variant="ghost" size="sm" asChild>
           <Link href="/interview/questions">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            返回題庫
+            {en ? "Back to question bank" : "返回題庫"}
           </Link>
         </Button>
       </div>
@@ -156,11 +166,11 @@ function PracticeContent() {
       {/* 問題卡片 */}
       <Card>
         <CardHeader>
-          <CardTitle>面試問題</CardTitle>
+          <CardTitle>{en ? "Interview question" : "面試問題"}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-lg font-medium">
-            {currentQuestion?.question || "請從題庫選擇一個問題"}
+            {displayedQuestion?.question || (en ? "Choose a question from the question bank." : "請從題庫選擇一個問題")}
           </p>
         </CardContent>
       </Card>
@@ -168,9 +178,9 @@ function PracticeContent() {
       {/* 錄音/輸入區 */}
       <Card>
         <CardHeader>
-          <CardTitle>你的回答</CardTitle>
+          <CardTitle>{en ? "Your answer" : "你的回答"}</CardTitle>
           <CardDescription>
-            使用錄音或直接輸入文字回答
+            {en ? "Record your answer or enter it as text." : "使用錄音或直接輸入文字回答"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -182,14 +192,14 @@ function PracticeContent() {
               onClick={() => setMode("record")}
             >
               <Mic className="h-4 w-4 mr-2" />
-              錄音模式
+              {en ? "Record" : "錄音模式"}
             </Button>
             <Button
               variant={mode === "text" ? "default" : "outline"}
               size="sm"
               onClick={() => setMode("text")}
             >
-              文字模式
+              {en ? "Text" : "文字模式"}
             </Button>
           </div>
 
@@ -208,7 +218,7 @@ function PracticeContent() {
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {isPaused ? "已暫停" : "錄音中"}
+                        {isPaused ? (en ? "Paused" : "已暫停") : (en ? "Recording" : "錄音中")}
                       </span>
                     </div>
                   </div>
@@ -263,7 +273,7 @@ function PracticeContent() {
                 {isTranscribing && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>正在轉換語音...</span>
+                    <span>{en ? "Transcribing audio..." : "正在轉換語音..."}</span>
                   </div>
                 )}
               </div>
@@ -271,12 +281,12 @@ function PracticeContent() {
               {/* 轉譯結果 */}
               {transcript && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">轉譯結果</label>
+                  <label className="text-sm font-medium">{en ? "Transcript" : "轉譯結果"}</label>
                   <Textarea
                     value={transcript}
                     onChange={(e) => setTranscript(e.target.value)}
                     rows={6}
-                    placeholder="轉譯的文字會顯示在這裡..."
+                    placeholder={en ? "Your transcript will appear here..." : "轉譯的文字會顯示在這裡..."}
                   />
                 </div>
               )}
@@ -286,7 +296,7 @@ function PracticeContent() {
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
               rows={8}
-              placeholder="直接輸入你的回答..."
+              placeholder={en ? "Type your answer..." : "直接輸入你的回答..."}
             />
           )}
 
@@ -296,7 +306,7 @@ function PracticeContent() {
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={handleReset}>
               <RotateCcw className="h-4 w-4 mr-2" />
-              重新開始
+              {en ? "Start over" : "重新開始"}
             </Button>
             <Button
               onClick={handleEvaluate}
@@ -305,12 +315,12 @@ function PracticeContent() {
               {isEvaluating ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  評分中...
+                  {en ? "Scoring..." : "評分中..."}
                 </>
               ) : (
                 <>
                   <Send className="h-4 w-4 mr-2" />
-                  AI 評分
+                  {en ? "Get AI feedback" : "AI 評分"}
                 </>
               )}
             </Button>
@@ -322,7 +332,7 @@ function PracticeContent() {
       {evaluation && (
         <Card>
           <CardHeader>
-            <CardTitle>AI 評分結果</CardTitle>
+            <CardTitle>{en ? "AI feedback" : "AI 評分結果"}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* 分數 */}
@@ -330,7 +340,7 @@ function PracticeContent() {
               <div className={`text-5xl font-bold ${getScoreColor(evaluation.score)}`}>
                 {evaluation.score}
               </div>
-              <p className="text-sm text-muted-foreground mt-1">/ 100 分</p>
+              <p className="text-sm text-muted-foreground mt-1">{en ? "/ 100" : "/ 100 分"}</p>
               <Progress value={evaluation.score} className="mt-4" />
             </div>
 
@@ -339,7 +349,7 @@ function PracticeContent() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-green-600">
                   <CheckCircle className="h-4 w-4" />
-                  <span className="font-medium">優點</span>
+                  <span className="font-medium">{en ? "Strengths" : "優點"}</span>
                 </div>
                 <ul className="space-y-1">
                   {evaluation.strengths.map((item, index) => (
@@ -354,7 +364,7 @@ function PracticeContent() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-yellow-600">
                   <AlertCircle className="h-4 w-4" />
-                  <span className="font-medium">改進空間</span>
+                  <span className="font-medium">{en ? "Areas to improve" : "改進空間"}</span>
                 </div>
                 <ul className="space-y-1">
                   {evaluation.improvements.map((item, index) => (
@@ -369,7 +379,7 @@ function PracticeContent() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-blue-600">
                   <Lightbulb className="h-4 w-4" />
-                  <span className="font-medium">建議</span>
+                  <span className="font-medium">{en ? "Suggestions" : "建議"}</span>
                 </div>
                 <ul className="space-y-1">
                   {evaluation.suggestions.map((item, index) => (

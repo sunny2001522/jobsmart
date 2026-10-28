@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Play, Bookmark } from "lucide-react";
+import { getInterviewQuestions } from "@/lib/turso/db";
+import { useI18n } from "@/contexts/i18n-context";
 
 type QuestionCategory =
   | "behavioral"
@@ -41,19 +43,15 @@ interface InterviewQuestion {
   isBookmarked: boolean;
 }
 
-const categoryLabels: Record<QuestionCategory, string> = {
-  behavioral: "行為問題",
-  technical: "技術問題",
-  situational: "情境問題",
-  self_introduction: "自我介紹",
-  other: "其他",
+const categoryLabels: Record<QuestionCategory, { zh: string; en: string }> = {
+  behavioral: { zh: "行為問題", en: "Behavioral" },
+  technical: { zh: "技術問題", en: "Technical" },
+  situational: { zh: "情境問題", en: "Situational" },
+  self_introduction: { zh: "自我介紹", en: "Self introduction" },
+  other: { zh: "其他", en: "Other" },
 };
 
-const difficultyLabels = {
-  easy: "簡單",
-  medium: "中等",
-  hard: "困難",
-};
+const difficultyLabels = { easy: { zh: "簡單", en: "Easy" }, medium: { zh: "中等", en: "Medium" }, hard: { zh: "困難", en: "Hard" } };
 
 // 預設題庫
 const defaultQuestions: InterviewQuestion[] = [
@@ -129,7 +127,22 @@ const defaultQuestions: InterviewQuestion[] = [
   },
 ];
 
+const englishQuestions = [
+  "Tell me about yourself.",
+  "Why do you want to join our company?",
+  "Describe a time you overcame a challenge.",
+  "What are your strengths and weaknesses?",
+  "Describe a disagreement with a teammate and how you handled it.",
+  "How do you handle work-related stress?",
+  "Describe a project you led.",
+  "Where do you see your career in five years?",
+  "What would you do if your manager gave you an unrealistic deadline?",
+  "Describe a failure and what you learned from it.",
+];
+
 export default function QuestionsPage() {
+  const { locale } = useI18n();
+  const en = locale === "en";
   const [questions, setQuestions] = useState<InterviewQuestion[]>(defaultQuestions);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -139,6 +152,27 @@ export default function QuestionsPage() {
     category: "behavioral" as QuestionCategory,
     difficulty: "medium" as "easy" | "medium" | "hard",
   });
+
+  useEffect(() => {
+    let active = true;
+    getInterviewQuestions().then((stored) => {
+      if (!active || !stored?.length) return;
+      const imported = stored.map((item) => ({
+        id: item.id,
+        question: item.question,
+        category: (["behavioral", "technical", "situational", "self_introduction", "other"] as string[]).includes(item.category || "")
+          ? item.category as QuestionCategory
+          : "other" as QuestionCategory,
+        difficulty: (item.difficulty === "easy" || item.difficulty === "hard" ? item.difficulty : "medium") as "easy" | "medium" | "hard",
+        isBookmarked: false,
+      }));
+      setQuestions((current) => {
+        const existing = new Set(current.map((question) => question.question));
+        return [...imported.filter((question) => !existing.has(question.question)), ...current];
+      });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const filteredQuestions = questions.filter((q) => {
     const matchesSearch = q.question.toLowerCase().includes(searchQuery.toLowerCase());
@@ -174,12 +208,12 @@ export default function QuestionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">面試題庫</h1>
-          <p className="text-muted-foreground">瀏覽和練習常見面試題目</p>
+          <h1 className="text-2xl font-bold">{en ? "Question bank" : "面試題庫"}</h1>
+          <p className="text-muted-foreground">{en ? "Browse and practice common interview questions" : "瀏覽和練習常見面試題目"}</p>
         </div>
         <Button onClick={() => setIsAddDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          新增題目
+          {en ? "Add question" : "新增題目"}
         </Button>
       </div>
 
@@ -188,7 +222,7 @@ export default function QuestionsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="搜尋題目..."
+            placeholder={en ? "Search questions..." : "搜尋題目..."}
             className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -196,13 +230,13 @@ export default function QuestionsPage() {
         </div>
         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="選擇類別" />
+            <SelectValue placeholder={en ? "Choose a category" : "選擇類別"} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部類別</SelectItem>
+            <SelectItem value="all">{en ? "All categories" : "全部類別"}</SelectItem>
             {Object.entries(categoryLabels).map(([value, label]) => (
               <SelectItem key={value} value={value}>
-                {label}
+                {label[en ? "en" : "zh"]}
               </SelectItem>
             ))}
           </SelectContent>
@@ -212,9 +246,9 @@ export default function QuestionsPage() {
       {/* 題目列表 */}
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">全部 ({questions.length})</TabsTrigger>
+          <TabsTrigger value="all">{en ? "All" : "全部"} ({questions.length})</TabsTrigger>
           <TabsTrigger value="bookmarked">
-            已收藏 ({questions.filter((q) => q.isBookmarked).length})
+            {en ? "Bookmarked" : "已收藏"} ({questions.filter((q) => q.isBookmarked).length})
           </TabsTrigger>
         </TabsList>
 
@@ -223,14 +257,15 @@ export default function QuestionsPage() {
             {filteredQuestions.map((question) => (
               <QuestionCard
                 key={question.id}
-                question={question}
+                question={locale === "en" && /^([1-9]|10)$/.test(question.id) ? { ...question, question: englishQuestions[Number(question.id) - 1] } : question}
                 onToggleBookmark={toggleBookmark}
+                locale={locale}
               />
             ))}
             {filteredQuestions.length === 0 && (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                  <p>找不到符合條件的題目</p>
+                  <p>{en ? "No questions match your filters" : "找不到符合條件的題目"}</p>
                 </CardContent>
               </Card>
             )}
@@ -244,15 +279,16 @@ export default function QuestionsPage() {
               .map((question) => (
                 <QuestionCard
                   key={question.id}
-                  question={question}
+                  question={locale === "en" && /^([1-9]|10)$/.test(question.id) ? { ...question, question: englishQuestions[Number(question.id) - 1] } : question}
                   onToggleBookmark={toggleBookmark}
+                  locale={locale}
                 />
               ))}
             {questions.filter((q) => q.isBookmarked).length === 0 && (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                  <p>還沒有收藏任何題目</p>
-                  <p className="text-sm mt-1">點擊書籤圖示收藏題目</p>
+                  <p>{en ? "No bookmarked questions yet" : "還沒有收藏任何題目"}</p>
+                  <p className="text-sm mt-1">{en ? "Select the bookmark icon to save a question" : "點擊書籤圖示收藏題目"}</p>
                 </CardContent>
               </Card>
             )}
@@ -264,15 +300,15 @@ export default function QuestionsPage() {
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>新增面試題目</DialogTitle>
-            <DialogDescription>新增一個自訂的面試題目到題庫</DialogDescription>
+            <DialogTitle>{en ? "Add interview question" : "新增面試題目"}</DialogTitle>
+            <DialogDescription>{en ? "Add a custom question to your question bank" : "新增一個自訂的面試題目到題庫"}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="question">題目內容</Label>
+              <Label htmlFor="question">{en ? "Question" : "題目內容"}</Label>
               <Textarea
                 id="question"
-                placeholder="輸入面試題目..."
+                placeholder={en ? "Enter an interview question..." : "輸入面試題目..."}
                 value={newQuestion.question}
                 onChange={(e) =>
                   setNewQuestion({ ...newQuestion, question: e.target.value })
@@ -281,7 +317,7 @@ export default function QuestionsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>類別</Label>
+                <Label>{en ? "Category" : "類別"}</Label>
                 <Select
                   value={newQuestion.category}
                   onValueChange={(value) =>
@@ -297,14 +333,14 @@ export default function QuestionsPage() {
                   <SelectContent>
                     {Object.entries(categoryLabels).map(([value, label]) => (
                       <SelectItem key={value} value={value}>
-                        {label}
+                        {label[en ? "en" : "zh"]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>難度</Label>
+                <Label>{en ? "Difficulty" : "難度"}</Label>
                 <Select
                   value={newQuestion.difficulty}
                   onValueChange={(value) =>
@@ -320,7 +356,7 @@ export default function QuestionsPage() {
                   <SelectContent>
                     {Object.entries(difficultyLabels).map(([value, label]) => (
                       <SelectItem key={value} value={value}>
-                        {label}
+                        {label[en ? "en" : "zh"]}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -330,9 +366,9 @@ export default function QuestionsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-              取消
+              {en ? "Cancel" : "取消"}
             </Button>
-            <Button onClick={handleAddQuestion}>新增</Button>
+            <Button onClick={handleAddQuestion}>{en ? "Add" : "新增"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -343,10 +379,13 @@ export default function QuestionsPage() {
 function QuestionCard({
   question,
   onToggleBookmark,
+  locale,
 }: {
   question: InterviewQuestion;
   onToggleBookmark: (id: string) => void;
+  locale: "en" | "zh-TW";
 }) {
+  const en = locale === "en";
   return (
     <Card>
       <CardContent className="p-4">
@@ -354,7 +393,7 @@ function QuestionCard({
           <div className="flex-1">
             <p className="font-medium">{question.question}</p>
             <div className="flex items-center gap-2 mt-2">
-              <Badge variant="secondary">{categoryLabels[question.category]}</Badge>
+              <Badge variant="secondary">{categoryLabels[question.category][en ? "en" : "zh"]}</Badge>
               <Badge
                 variant="outline"
                 className={
@@ -365,7 +404,7 @@ function QuestionCard({
                     : "text-red-600"
                 }
               >
-                {difficultyLabels[question.difficulty]}
+                {difficultyLabels[question.difficulty][en ? "en" : "zh"]}
               </Badge>
             </div>
           </div>
@@ -384,7 +423,7 @@ function QuestionCard({
             <Button asChild size="sm">
               <Link href={`/interview/practice?q=${question.id}`}>
                 <Play className="h-4 w-4 mr-2" />
-                練習
+                {en ? "Practice" : "練習"}
               </Link>
             </Button>
           </div>

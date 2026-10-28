@@ -7,6 +7,7 @@ import { Plus } from "lucide-react";
 import { ApplicationCard } from "./application-card";
 import { cn } from "@/lib/utils";
 import type { JobApplication, ApplicationStatus } from "@/types";
+import { useI18n } from "@/contexts/i18n-context";
 
 interface KanbanColumnProps {
   id: ApplicationStatus;
@@ -15,12 +16,14 @@ interface KanbanColumnProps {
   selectedApplicationId?: string;
   showSummaries?: boolean;
   onViewDetail?: (application: JobApplication) => void;
+  onApprove?: (application: JobApplication) => void;
   onAddClick?: () => void;
   isMobile?: boolean;
   topContent?: ReactNode;
 }
 
-export function KanbanColumn({ id, title, applications, selectedApplicationId, showSummaries = true, onViewDetail, onAddClick, isMobile = false, topContent }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, applications, selectedApplicationId, showSummaries = true, onViewDetail, onApprove, onAddClick, isMobile = false, topContent }: KanbanColumnProps) {
+  const { locale } = useI18n();
   const { isOver, setNodeRef } = useDroppable({
     id,
   });
@@ -29,7 +32,7 @@ export function KanbanColumn({ id, title, applications, selectedApplicationId, s
     <div
       ref={setNodeRef}
       className={cn(
-        "bg-muted/50 rounded-lg p-3",
+        "min-w-0 bg-muted/50 rounded-lg p-3",
         isOver && "bg-muted",
         isMobile ? "w-full" : "flex-shrink-0 w-72"
       )}
@@ -44,7 +47,7 @@ export function KanbanColumn({ id, title, applications, selectedApplicationId, s
         <button
           onClick={onAddClick}
           className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          title={`新增到${title}`}
+          title={`${locale === "en" ? "Add to " : "新增到"}${title}`}
         >
           <Plus className="h-4 w-4" />
         </button>
@@ -68,6 +71,7 @@ export function KanbanColumn({ id, title, applications, selectedApplicationId, s
               isSelected={application.id === selectedApplicationId}
               showSummary={showSummaries}
               onViewDetail={() => onViewDetail?.(application)}
+              onApprove={() => onApprove?.(application)}
               isMobile={isMobile}
             />
           ))}
@@ -76,7 +80,7 @@ export function KanbanColumn({ id, title, applications, selectedApplicationId, s
               "flex items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg",
               isMobile ? "min-w-[200px] h-24 flex-shrink-0 snap-start" : "h-24"
             )}>
-              <p className="text-xs text-muted-foreground">拖曳卡片至此</p>
+              <p className="text-xs text-muted-foreground">{locale === "en" ? "No applications yet" : "拖曳卡片至此"}</p>
             </div>
           )}
         </div>

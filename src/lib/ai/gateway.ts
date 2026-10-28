@@ -293,13 +293,15 @@ export async function customizeResume(
   baseResume: string,
   jobDescription: string,
   companyName: string,
-  position: string
+  position: string,
+  additionalContext?: string
 ): Promise<{
   customizedContent: string;
   atsScore: number;
   matchedKeywords: string[];
   missingKeywords: string[];
   suggestions: string[];
+  audit: ResumeAudit;
 }> {
   const prompt = `
 ## 基礎履歷
@@ -310,10 +312,11 @@ ${baseResume}
 職位名稱：${position}
 職缺描述：
 ${jobDescription}
+${additionalContext ? `\n## 使用者補充的真實經驗（只能在內容有明確支持時採用）\n${additionalContext}` : ""}
 `;
 
   const result = await aiGateway("resume_customization", prompt, {
-    systemPrompt: `你是一個專業的履歷顧問，專精於為不同職缺客製化履歷。
+    systemPrompt: `你是一個嚴謹的履歷顧問。只依據基礎履歷改寫，不得補造任何能力、年資、雇主、職稱、責任、數字或成果。先拆解 JD 必要條件與加分條件；必要條件權重 2、加分條件權重 1。每項條件都要記錄履歷原文證據；沒有證據就列為缺口，不得把關鍵字硬塞進履歷。保留原文責任程度（協助不可改成主導）。
 
 任務：
 1. 根據目標職缺的 JD，微調基礎履歷的內容
@@ -329,7 +332,8 @@ ${jobDescription}
   "atsScore": 0-100 的整數分數（預估 ATS 通過率）,
   "matchedKeywords": ["已匹配的關鍵字1", "關鍵字2"],
   "missingKeywords": ["建議補充的關鍵字1", "關鍵字2"],
-  "suggestions": ["額外改善建議1", "建議2"]
+  "suggestions": ["額外改善建議1", "建議2"],
+  "requirements": [{"requirement":"JD 條件","priority":"required|preferred","evidence":"履歷原文或空字串","status":"supported|partial|missing"}]
 }
 
 重要：
@@ -342,22 +346,38 @@ ${jobDescription}
 
   try {
     const parsed = JSON.parse(result.text);
+    const content = String(parsed.customizedContent || "");
+    if (content.trim().length < Math.min(80, baseResume.trim().length * 0.4)) throw new Error("客製履歷輸出不完整");
+    const requirements = Array.isArray(parsed.requirements) ? parsed.requirements : [];
+    const audit = await reviewResumeClaims(baseResume, content, jobDescription, requirements);
     return {
-      customizedContent: parsed.customizedContent || baseResume,
-      atsScore: parsed.atsScore || 50,
-      matchedKeywords: parsed.matchedKeywords || [],
-      missingKeywords: parsed.missingKeywords || [],
-      suggestions: parsed.suggestions || [],
+      customizedContent: content,
+      atsScore: Math.max(0, Math.min(100, Number(parsed.atsScore) || 0)),
+      matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [],
+      missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords : [],
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+      audit: { ...audit, requirements },
     };
   } catch {
-    return {
-      customizedContent: baseResume,
-      atsScore: 50,
-      matchedKeywords: [],
-      missingKeywords: [],
-      suggestions: ["無法分析，請稍後再試"],
-    };
+    throw new Error("履歷客製或事實審核失敗，請稍後重試");
   }
+}
+
+export type ResumeAudit = {
+  status: "passed" | "needs_attention";
+  findings: Array<{ claim: string; status: "supported" | "exaggerated" | "unsupported"; evidence: string; reason: string }>;
+  requirements: Array<{ requirement: string; priority: "required" | "preferred"; evidence: string; status: "supported" | "partial" | "missing" }>;
+  summary: string;
+};
+
+export async function reviewResumeClaims(baseResume: string, draft: string, jobDescription: string, requirements: ResumeAudit["requirements"] = []): Promise<ResumeAudit> {
+  const result = await aiGateway("resume_customization", `基礎履歷：\n${baseResume}\n\n客製草稿：\n${draft}\n\nJD：\n${jobDescription}\n\n條件分析：${JSON.stringify(requirements)}`, {
+    systemPrompt: `你是獨立履歷事實審核員，與改寫者分開審核。逐項檢查草稿中的具體事實與責任強度是否能由基礎履歷支持。只將清楚可對照的原文放入 evidence；不能支持的數字、成果、技能、責任或資格標為 unsupported；原文被升級為更大責任或成果標為 exaggerated。通用自我描述不必列。status 有任何 exaggerated/unsupported 即 needs_attention。回傳純 JSON：{"status":"passed|needs_attention","summary":"...","findings":[{"claim":"草稿原句","status":"supported|exaggerated|unsupported","evidence":"基礎履歷原文或空字串","reason":"原因"}],"requirements":[{"requirement":"...","priority":"required|preferred","evidence":"...","status":"supported|partial|missing"}]}`,
+    temperature: 0.1, maxTokens: 3000,
+  });
+  const parsed = JSON.parse(result.text) as ResumeAudit;
+  if (!Array.isArray(parsed.findings) || !["passed", "needs_attention"].includes(parsed.status)) throw new Error("事實審核格式無效");
+  return { ...parsed, requirements: Array.isArray(parsed.requirements) ? parsed.requirements : requirements };
 }
 
 // 便捷函數：JD 價值觀分析（20 因素評分）

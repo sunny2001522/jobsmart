@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ExternalLink, FileText, Sparkles, Loader2, Pencil, X, Link2, Gift, Languages, RefreshCw } from "lucide-react";
+import { FileText, Sparkles, Loader2, Pencil, X, Link2, Gift, Languages, RefreshCw } from "lucide-react";
 import type { JobApplication, JDContentZh } from "@/types";
 
 interface JDSectionProps {
@@ -446,7 +446,7 @@ export function JDSection({ application, onUpdate }: JDSectionProps) {
                   </Button>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-6">
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
                 {jdContent?.description}
               </p>
             </div>
@@ -522,18 +522,6 @@ export function JDSection({ application, onUpdate }: JDSectionProps) {
               </div>
             )}
 
-            {/* 原始 JD 連結 */}
-            {application.jd_url && (
-              <a
-                href={application.jd_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <ExternalLink className="h-4 w-4" />
-                查看原始 JD
-              </a>
-            )}
           </TabsContent>
         </Tabs>
       )}

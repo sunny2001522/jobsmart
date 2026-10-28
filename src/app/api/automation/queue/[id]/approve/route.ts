@@ -10,6 +10,8 @@ export async function POST(request: Request, context: RouteContext) {
   const db = getTursoClient();
   if (!db) return NextResponse.json({ error: "Turso is not configured" }, { status: 503 });
   await ensureTursoSchema();
+  let recoveryApplicationId = "";
+  let recoveryRelationId = "";
 
   try {
     const body = await request.json();
@@ -66,8 +68,10 @@ export async function POST(request: Request, context: RouteContext) {
       }]) as Record<string, unknown> | null;
       applicationId = String(application?.id ?? "");
       if (!applicationId) throw new Error("建立追蹤資料失敗");
-      await db.execute({ sql: "UPDATE job_leads SET application_id = ?, status = 'processing', updated_at = ? WHERE id = ? AND user_id = ?", args: [applicationId, new Date().toISOString(), id, "demo-user"] });
+      await db.execute({ sql: "UPDATE job_leads SET application_id = ?, updated_at = ? WHERE id = ? AND user_id = ?", args: [applicationId, new Date().toISOString(), id, "demo-user"] });
     }
+    recoveryApplicationId = applicationId;
+    await db.execute({ sql: "UPDATE job_leads SET status = 'processing', updated_at = ? WHERE id = ? AND user_id = ?", args: [new Date().toISOString(), id, "demo-user"] });
 
     application = await dispatch("updateJobApplication", [applicationId, {
       jd_content: { description: jdContent, source: "user-reviewed", verified_at: new Date().toISOString() },
@@ -79,19 +83,23 @@ export async function POST(request: Request, context: RouteContext) {
     let relation = await dispatch("getVersionJobResume", [versionId, applicationId]) as Record<string, unknown> | null;
     if (!relation) relation = await dispatch("addJobToVersion", [versionId, applicationId]) as Record<string, unknown> | null;
     if (!relation?.id) throw new Error("無法建立履歷與職缺的關聯");
+    recoveryRelationId = String(relation.id);
 
     await dispatch("updateVersionJobResume", [String(relation.id), { generation_status: "generating" }]);
+    await dispatch("updateJobApplication", [applicationId, { resume_status: "generating" }]);
     const tailored = await customizeResume(version.base_plain_text, jdContent, String(lead.company), String(lead.role));
     const saved = await dispatch("updateVersionJobResume", [String(relation.id), {
       customized_plain_text: tailored.customizedContent,
       ats_score: tailored.atsScore,
       matched_keywords: tailored.matchedKeywords,
       missing_keywords: tailored.missingKeywords,
-      ai_suggestions: { suggestions: tailored.suggestions },
+      ai_suggestions: { suggestions: tailored.suggestions, audit: tailored.audit },
       generation_status: "completed",
       generated_at: new Date().toISOString(),
     }]) as Record<string, unknown> | null;
     if (!saved) throw new Error("客製履歷儲存失敗");
+    application = await dispatch("updateJobApplication", [applicationId, { resume_status: "needs_review" }]) as Record<string, unknown> | null;
+    if (!application) throw new Error("更新履歷審核狀態失敗");
 
     await db.execute({ sql: "DELETE FROM job_leads WHERE id = ? AND user_id = ?", args: [id, "demo-user"] });
     return NextResponse.json({ data: {
@@ -106,10 +114,19 @@ export async function POST(request: Request, context: RouteContext) {
         matchedKeywords: tailored.matchedKeywords,
         missingKeywords: tailored.missingKeywords,
         suggestions: tailored.suggestions,
+        audit: tailored.audit,
       },
     } });
   } catch (error) {
     console.error("Failed to prepare job application", error);
+    if (recoveryRelationId) {
+      try { await dispatch("updateVersionJobResume", [recoveryRelationId, { generation_status: "failed" }]); }
+      catch (statusError) { console.error("Failed to record resume generation error", statusError); }
+    }
+    if (recoveryApplicationId) {
+      try { await dispatch("updateJobApplication", [recoveryApplicationId, { resume_status: "failed" }]); }
+      catch (statusError) { console.error("Failed to record application preparation error", statusError); }
+    }
     try {
       await db.execute({ sql: "UPDATE job_leads SET status = 'queued', updated_at = ? WHERE id = ? AND user_id = ? AND status = 'processing'", args: [new Date().toISOString(), id, "demo-user"] });
     } catch (resetError) {

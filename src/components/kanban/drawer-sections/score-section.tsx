@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
   CheckCircle,
+  XCircle,
   Info,
   DollarSign,
   Scale,
@@ -26,9 +28,11 @@ import {
   Gift,
   MapPin,
   Settings,
+  Heart,
   type LucideIcon,
 } from "lucide-react";
-import type { ValueRanking, JobApplication } from "@/types";
+import type { ValueRanking, JobApplication, CompanyReview } from "@/types";
+import { useI18n } from "@/contexts/i18n-context";
 
 export interface ScoreBreakdown {
   valueId: string;
@@ -98,7 +102,10 @@ interface ScoreSectionProps {
   matchResult: ValueMatchResult | null;
   userRanking: ValueRanking | null;
   application: JobApplication;
+  reviews: CompanyReview[];
   isLoading?: boolean;
+  onRefreshScore?: () => Promise<void>;
+  isRefreshingScore?: boolean;
 }
 
 // Get description from JD/application data for each value
@@ -182,8 +189,13 @@ export function ScoreSection({
   matchResult,
   userRanking,
   application,
+  reviews,
   isLoading,
+  onRefreshScore,
+  isRefreshingScore = false,
 }: ScoreSectionProps) {
+  const { locale } = useI18n();
+  const isEnglish = locale === "en";
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-32">
@@ -195,6 +207,9 @@ export function ScoreSection({
   const hasRanking =
     userRanking && userRanking.top_values && userRanking.top_values.length > 0;
   const hasMatchResult = matchResult && matchResult.breakdown.length > 0;
+  const companyRating = reviews.length > 0
+    ? Math.max(1, Math.min(10, Math.round(reviews.reduce((total, review) => total + (review.sentiment_score ?? (review.sentiment === "positive" ? 85 : review.sentiment === "negative" ? 25 : 55)), 0) / reviews.length / 10)))
+    : null;
 
   // Check if value is in top 3 priority
   const isTopPriority = (index: number): boolean => index < 3;
@@ -221,12 +236,33 @@ export function ScoreSection({
 
   return (
     <div className="space-y-4 overflow-hidden w-full">
-      {/* 總分 - 緊湊單行 */}
-      <div className="flex items-center gap-3 pb-3 border-b">
-        <span className="text-3xl font-bold text-primary">
-          {hasMatchResult ? matchResult.matchScore : "--"}
-        </span>
-        <span className="text-sm text-muted-foreground">價值觀匹配度</span>
+      {onRefreshScore && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
+          <p className="min-w-0 text-xs text-muted-foreground">
+            {isEnglish ? "Use company JD and reviews to calculate scores" : "使用公司 JD 與評論重新計算分數"}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0 gap-1.5"
+            onClick={() => void onRefreshScore()}
+            disabled={isRefreshingScore}
+          >
+            {isRefreshingScore ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />}
+            {isRefreshingScore ? (isEnglish ? "Calculating..." : "計算中...") : (isEnglish ? "Search & score" : "查詢並算分")}
+          </Button>
+        </div>
+      )}
+      <div className="grid gap-3 border-b pb-4 sm:grid-cols-2">
+        <div className="flex items-center gap-3">
+          <Star className="h-6 w-6 fill-amber-400 text-amber-400" />
+          <div><p className="text-xs text-muted-foreground">{isEnglish ? "AI company rating (1–10)" : "AI 公司評價（1–10）"}</p><p className="text-3xl font-bold">{companyRating ?? "--"}<span className="text-sm font-normal text-muted-foreground"> / 10</span></p></div>
+        </div>
+        {hasRanking ? <div className="flex items-center gap-3">
+          <Heart className="h-6 w-6 fill-rose-400 text-rose-400" />
+          <div><p className="text-xs text-muted-foreground">{isEnglish ? "Values match" : "價值觀匹配度"}</p><p className="text-3xl font-bold text-primary">{hasMatchResult ? matchResult.matchScore : "--"}<span className="text-sm font-normal text-muted-foreground"> / 100</span></p></div>
+        </div> : <Link href="/values" className="flex items-center gap-2 rounded-lg border border-dashed p-2 text-xs text-muted-foreground hover:border-primary hover:text-primary"><Heart className="h-4 w-4" />{isEnglish ? "Complete the values cards to calculate your match" : "完成價值觀卡牌後計算個人匹配度"}</Link>}
       </div>
 
       {/* 價值觀列表 */}
@@ -235,6 +271,8 @@ export function ScoreSection({
           const Icon = VALUE_ICONS[value.id];
           const { score, isMatched } = getValueScore(value.id);
           const displayScore = score !== null ? Math.round(score) : null;
+          const breakdown = matchResult?.breakdown.find((item) => item.valueId === value.id);
+          const weight = breakdown ? Math.round(breakdown.maxPossibleScore) : null;
           const description = getValueDescription(value.id, application);
           const isTop = isTopPriority(index);
 
@@ -254,10 +292,13 @@ export function ScoreSection({
                   {isMatched && (
                     <CheckCircle className="h-3 w-3 text-green-500 shrink-0" />
                   )}
+                  {displayScore !== null && !isMatched && (
+                    <XCircle className="h-3 w-3 text-red-500 shrink-0" />
+                  )}
                 </span>
                 <span className="text-muted-foreground flex items-center gap-1 shrink-0 ml-2 text-xs">
                   {displayScore !== null ? (
-                    <span>{displayScore}★</span>
+                    <span>{displayScore} pts{weight !== null ? ` · ${weight}%` : ""}</span>
                   ) : (
                     <>
                       <span>?</span>
@@ -285,7 +326,7 @@ export function ScoreSection({
           className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700"
         >
           <Info className="h-3 w-3" />
-          <span>完成價值觀排序以獲得個人化分析 →</span>
+          <span>{isEnglish ? "Complete values ranking for personalized analysis →" : "完成價值觀排序以獲得個人化分析 →"}</span>
         </Link>
       )}
     </div>

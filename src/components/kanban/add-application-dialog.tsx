@@ -71,6 +71,7 @@ export function AddApplicationDialog({
   const [isTranslating, setIsTranslating] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [fetchedData, setFetchedData] = useState<FetchedJDData | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // 當 defaultCategoryId 變化時更新
   useEffect(() => {
@@ -156,7 +157,11 @@ export function AddApplicationDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!companyName || !position) return;
+    if (!companyName.trim() || !position.trim()) {
+      setValidationError("Please enter a company name and job title.");
+      return;
+    }
+    setValidationError(null);
 
     onSubmit({
       companyName,
@@ -190,7 +195,7 @@ export function AddApplicationDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <DialogHeader>
             <DialogTitle>新增求職追蹤</DialogTitle>
             <DialogDescription>
@@ -198,6 +203,7 @@ export function AddApplicationDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {validationError && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{validationError}</p>}
             <div className="space-y-2">
               <Label htmlFor="companyName">公司名稱 *</Label>
               <Input

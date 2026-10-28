@@ -68,12 +68,22 @@ function JobCard({
   onGenerate,
   onRemove,
 }: {
-  vjr: VersionJobResume & { job_application: JobApplication };
+  vjr: VersionJobResume & { job_application?: JobApplication };
   versionId: string;
   onGenerate: () => void;
   onRemove: () => void;
 }) {
   const job = vjr.job_application;
+  if (!job) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-between gap-3 p-4">
+          <p className="text-sm text-muted-foreground">找不到對應的追蹤職缺資料</p>
+          <Button size="sm" variant="outline" onClick={onRemove}>移除此關聯</Button>
+        </CardContent>
+      </Card>
+    );
+  }
   const isCompleted = vjr.generation_status === "completed";
   const isGenerating = vjr.generation_status === "generating";
 

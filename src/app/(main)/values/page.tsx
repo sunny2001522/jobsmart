@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { GripVertical, RotateCcw, Loader2, Check, ImageIcon } from "lucide-react";
+import { GripVertical, RotateCcw, Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getValueRanking, saveValueRanking } from "@/lib/turso/db";
 import {
@@ -24,39 +24,45 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Image from "next/image";
+import { useI18n } from "@/contexts/i18n-context";
 
 interface ValueCard {
   id: string;
   name: string;
+  nameEn: string;
   description: string;
+  descriptionEn: string;
   image?: string;
 }
 
 const VALUE_CARDS: ValueCard[] = [
-  { id: "salary", name: "薪資待遇", description: "週末老闆要我加班，但有加班費我很願意", image: "/images/values/salary.png" },
-  { id: "balance", name: "工作生活平衡", description: "六點準時下班去接小孩，這比什麼都重要", image: "/images/values/balance.png" },
-  { id: "growth", name: "職涯發展", description: "公司有完整的升遷管道，三年內能當主管", image: "/images/values/growth.png" },
-  { id: "stability", name: "穩定性", description: "就算經濟不景氣，公司也不會輕易裁員", image: "/images/values/stability.png" },
-  { id: "learning", name: "學習成長", description: "公司願意出錢讓我去上課、考證照", image: "/images/values/learning.png" },
-  { id: "autonomy", name: "自主性", description: "老闆只看結果，不管我用什麼方法完成", image: "/images/values/autonomy.png" },
-  { id: "flexibility", name: "彈性工時", description: "睡到自然醒再進公司，晚點走就好", image: "/images/values/flexibility.png" },
-  { id: "remote", name: "遠端工作", description: "在家穿睡衣開會，省下通勤時間", image: "/images/values/remote.png" },
-  { id: "teamwork", name: "團隊合作", description: "遇到困難時同事會主動來幫忙", image: "/images/values/teamwork.png" },
-  { id: "colleagues", name: "同事關係", description: "下班後還會約同事去吃飯聊天", image: "/images/values/colleagues.png" },
-  { id: "manager", name: "主管支持", description: "主管會幫我擋掉不合理的要求", image: "/images/values/manager.png" },
-  { id: "achievement", name: "成就感", description: "看到自己做的產品被很多人使用", image: "/images/values/achievement.png" },
-  { id: "recognition", name: "專業認可", description: "在公司裡被認為是這個領域的專家", image: "/images/values/recognition.png" },
-  { id: "impact", name: "社會影響力", description: "我的工作能幫助到真正需要的人", image: "/images/values/impact.png" },
-  { id: "challenge", name: "挑戰性", description: "每天都有新問題要解決，不會無聊", image: "/images/values/challenge.png" },
-  { id: "creativity", name: "創意發揮", description: "可以嘗試新點子，不用照著SOP走", image: "/images/values/creativity.png" },
-  { id: "culture", name: "公司文化", description: "公司的價值觀跟我自己的很接近", image: "/images/values/culture.png" },
-  { id: "independence", name: "獨立工作", description: "一個人安靜地把事情做完，不用開會", image: "/images/values/independence.png" },
-  { id: "benefits", name: "福利制度", description: "三節獎金、員工旅遊、免費午餐都有", image: "/images/values/benefits.png" },
-  { id: "location", name: "地理位置", description: "公司就在捷運站旁邊，通勤超方便", image: "/images/values/location.png" },
+  { id: "salary", name: "薪資待遇", description: "週末老闆要我加班，但有加班費我很願意", nameEn: 'Compensation', descriptionEn: 'I am happy to work weekends when overtime is paid.', image: "/images/values/salary.webp" },
+  { id: "balance", name: "工作生活平衡", description: "六點準時下班去接小孩，這比什麼都重要", nameEn: 'Work-life balance', descriptionEn: 'Leaving at six to pick up my children matters more than anything.', image: "/images/values/balance.webp" },
+  { id: "growth", name: "職涯發展", description: "公司有完整的升遷管道，三年內能當主管", nameEn: 'Career growth', descriptionEn: 'The company has a clear promotion path and I could become a manager within three years.', image: "/images/values/growth.webp" },
+  { id: "stability", name: "穩定性", description: "就算經濟不景氣，公司也不會輕易裁員", nameEn: 'Stability', descriptionEn: 'The company would not lay people off easily, even in a downturn.', image: "/images/values/stability.webp" },
+  { id: "learning", name: "學習成長", description: "公司願意出錢讓我去上課、考證照", nameEn: 'Learning and growth', descriptionEn: 'The company pays for classes and professional certifications.', image: "/images/values/learning.webp" },
+  { id: "autonomy", name: "自主性", description: "老闆只看結果，不管我用什麼方法完成", nameEn: 'Autonomy', descriptionEn: 'My manager cares about results, not how I achieve them.', image: "/images/values/autonomy.webp" },
+  { id: "flexibility", name: "彈性工時", description: "睡到自然醒再進公司，晚點走就好", nameEn: 'Flexible hours', descriptionEn: 'I can start later after waking naturally and leave later.', image: "/images/values/flexibility.webp" },
+  { id: "remote", name: "遠端工作", description: "在家穿睡衣開會，省下通勤時間", nameEn: 'Remote work', descriptionEn: 'I can join meetings in pajamas and save commuting time.', image: "/images/values/remote.webp" },
+  { id: "teamwork", name: "團隊合作", description: "遇到困難時同事會主動來幫忙", nameEn: 'Teamwork', descriptionEn: 'Coworkers proactively help when I run into trouble.', image: "/images/values/teamwork.webp" },
+  { id: "colleagues", name: "同事關係", description: "下班後還會約同事去吃飯聊天", nameEn: 'Coworker relationships', descriptionEn: 'I enjoy getting dinner and chatting with coworkers after work.', image: "/images/values/colleagues.webp" },
+  { id: "manager", name: "主管支持", description: "主管會幫我擋掉不合理的要求", nameEn: 'Manager support', descriptionEn: 'My manager shields me from unreasonable requests.', image: "/images/values/manager.webp" },
+  { id: "achievement", name: "成就感", description: "看到自己做的產品被很多人使用", nameEn: 'Sense of accomplishment', descriptionEn: 'Seeing many people use something I built is rewarding.', image: "/images/values/achievement.webp" },
+  { id: "recognition", name: "專業認可", description: "在公司裡被認為是這個領域的專家", nameEn: 'Professional recognition', descriptionEn: 'Being recognized as an expert in my field matters to me.', image: "/images/values/recognition.webp" },
+  { id: "impact", name: "社會影響力", description: "我的工作能幫助到真正需要的人", nameEn: 'Social impact', descriptionEn: 'My work helps people who truly need it.', image: "/images/values/impact.webp" },
+  { id: "challenge", name: "挑戰性", description: "每天都有新問題要解決，不會無聊", nameEn: 'Challenge', descriptionEn: 'Every day brings a new problem to solve, so work never feels boring.', image: "/images/values/challenge.webp" },
+  { id: "creativity", name: "創意發揮", description: "可以嘗試新點子，不用照著SOP走", nameEn: 'Creativity', descriptionEn: 'I can try new ideas without following an SOP.', image: "/images/values/creativity.webp" },
+  { id: "culture", name: "公司文化", description: "公司的價值觀跟我自己的很接近", nameEn: 'Company culture', descriptionEn: 'The company’s values are close to my own.', image: "/images/values/culture.webp" },
+  { id: "independence", name: "獨立工作", description: "一個人安靜地把事情做完，不用開會", nameEn: 'Independent work', descriptionEn: 'I can work quietly and finish things without meetings.', image: "/images/values/independence.webp" },
+  { id: "benefits", name: "福利制度", description: "三節獎金、員工旅遊、免費午餐都有", nameEn: 'Benefits', descriptionEn: 'The benefits include seasonal bonuses, trips, and free lunch.', image: "/images/values/benefits.webp" },
+  { id: "location", name: "地理位置", description: "公司就在捷運站旁邊，通勤超方便", nameEn: 'Location', descriptionEn: 'The office is next to an MRT station, making the commute easy.', image: "/images/values/location.webp" },
 ];
 
 // 卡片內容組件（供 SortableCard 和 DragOverlay 共用）
 function CardContent({ card, index, isDragging }: { card: ValueCard; index: number; isDragging?: boolean }) {
+  const { locale } = useI18n();
+  const name = locale === "en" ? card.nameEn : card.name;
+  const description = locale === "en" ? card.descriptionEn : card.description;
   return (
     <div
       className={cn(
@@ -71,7 +77,7 @@ function CardContent({ card, index, isDragging }: { card: ValueCard; index: numb
         {card.image ? (
           <Image
             src={card.image}
-            alt={card.name}
+            alt={name}
             fill
             className="object-cover"
             onError={(e) => {
@@ -79,8 +85,6 @@ function CardContent({ card, index, isDragging }: { card: ValueCard; index: numb
             }}
           />
         ) : null}
-        <ImageIcon className="h-8 w-8 text-muted-foreground/50 absolute" />
-
         {/* 排名徽章 */}
         <div className="absolute top-1 left-1 w-5 h-5 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-bold">
           {index + 1}
@@ -94,9 +98,9 @@ function CardContent({ card, index, isDragging }: { card: ValueCard; index: numb
 
       {/* 文字區域（佔一半） */}
       <div className="h-1/2 p-2 flex flex-col justify-center">
-        <h3 className="font-medium text-sm leading-tight">{card.name}</h3>
+        <h3 className="font-medium text-sm leading-tight">{name}</h3>
         <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 line-clamp-2">
-          {card.description}
+          {description}
         </p>
       </div>
     </div>
@@ -105,6 +109,8 @@ function CardContent({ card, index, isDragging }: { card: ValueCard; index: numb
 
 // 可拖曳的價值觀卡片
 function SortableValueCard({ card, index }: { card: ValueCard; index: number }) {
+  const { locale } = useI18n();
+  const cardName = locale === "en" ? card.nameEn : card.name;
   const {
     attributes,
     listeners,
@@ -126,6 +132,7 @@ function SortableValueCard({ card, index }: { card: ValueCard; index: number }) 
       className="touch-none"
       {...attributes}
       {...listeners}
+      aria-label={locale === "en" ? `${cardName}, rank ${index + 1}` : `${cardName}，第 ${index + 1} 名`}
     >
       <CardContent card={card} index={index} isDragging={isDragging} />
     </div>

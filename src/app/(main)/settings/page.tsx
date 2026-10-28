@@ -34,6 +34,8 @@ import {
 import { createClient } from "@/lib/turso/client";
 import { getProfile, updateProfile } from "@/lib/turso/db";
 import type { Profile } from "@/lib/turso/types";
+import { useI18n } from "@/contexts/i18n-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 // 擴展 Profile 類型以包含 Gmail 相關欄位
 interface ProfileWithGmail extends Profile {
@@ -41,20 +43,11 @@ interface ProfileWithGmail extends Profile {
   gmail_email?: string | null;
 }
 
-// LINE 綁定狀態類型
-interface LineBindingStatus {
-  connected: boolean;
-  binding: {
-    displayName: string | null;
-    pictureUrl: string | null;
-    linkedAt: string;
-    notificationEnabled: boolean;
-  } | null;
-}
-
 // 主要設定頁面內容組件（使用 useSearchParams）
 function SettingsContent() {
   const searchParams = useSearchParams();
+  const { t, locale } = useI18n();
+  const copy = (zh: string, en: string) => locale === "en" ? en : zh;
   const [profile, setProfile] = useState<ProfileWithGmail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -67,15 +60,6 @@ function SettingsContent() {
   const [weeklyDigest, setWeeklyDigest] = useState(true);
   const [interviewReminders, setInterviewReminders] = useState(true);
 
-  // Webhook settings
-  const [autoCustomize, setAutoCustomize] = useState(true);
-  const [autoCompanyReview, setAutoCompanyReview] = useState(true);
-  const [autoDraftEmail, setAutoDraftEmail] = useState(true);
-
-  // LINE 綁定狀態
-  const [lineBinding, setLineBinding] = useState<LineBindingStatus | null>(null);
-  const [isLoadingLine, setIsLoadingLine] = useState(true);
-  const [isUnlinkingLine, setIsUnlinkingLine] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -92,46 +76,15 @@ function SettingsContent() {
 
     // 檢查是否剛連結 Gmail
     if (searchParams.get("gmail_connected") === "true") {
-      setGmailJustConnected(true);
-      setTimeout(() => setGmailJustConnected(false), 5000);
+      const showConnected = window.setTimeout(() => setGmailJustConnected(true), 0);
+      const hideConnected = window.setTimeout(() => setGmailJustConnected(false), 5000);
+      return () => {
+        window.clearTimeout(showConnected);
+        window.clearTimeout(hideConnected);
+      };
     }
 
-    // 取得 LINE 綁定狀態
-    const fetchLineBinding = async () => {
-      setIsLoadingLine(true);
-      try {
-        const response = await fetch("/api/line/liff/bind");
-        if (response.ok) {
-          const data = await response.json();
-          setLineBinding(data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch LINE binding:", error);
-      }
-      setIsLoadingLine(false);
-    };
-    fetchLineBinding();
   }, [searchParams]);
-
-  // 解除 LINE 綁定
-  const handleUnlinkLine = async () => {
-    if (!confirm("確定要解除 LINE 連結嗎？解除後將無法透過 LINE 分享職缺。")) {
-      return;
-    }
-
-    setIsUnlinkingLine(true);
-    try {
-      const response = await fetch("/api/line/liff/bind", {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        setLineBinding({ connected: false, binding: null });
-      }
-    } catch (error) {
-      console.error("Failed to unlink LINE:", error);
-    }
-    setIsUnlinkingLine(false);
-  };
 
   const handleSaveProfile = async () => {
     if (!profile) return;
@@ -150,6 +103,7 @@ function SettingsContent() {
   };
 
   const handleSignOut = async () => {
+    await fetch("/api/auth/local/logout", { method: "POST" });
     const tursoClient = createClient();
     await tursoClient.auth.signOut();
     window.location.href = "/login";
@@ -160,37 +114,47 @@ function SettingsContent() {
     : 0;
 
   const subscriptionLabels = {
-    free: "免費方案",
-    pro: "Pro 方案",
-    enterprise: "企業方案",
+    free: copy("免費方案", "Free plan"),
+    pro: copy("Pro 方案", "Pro plan"),
+    enterprise: copy("企業方案", "Enterprise plan"),
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">設定</h1>
+        <h1 className="text-2xl font-bold">{t("settings.title")}</h1>
         <p className="text-muted-foreground">
-          管理你的帳戶設定和偏好
+          {t("settings.subtitle")}
         </p>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-col items-stretch justify-between gap-4 space-y-0 sm:flex-row sm:items-center">
+          <div>
+            <CardTitle>{t("language.preference")}</CardTitle>
+            <CardDescription>{t("language.description")}</CardDescription>
+          </div>
+          <LanguageSwitcher />
+        </CardHeader>
+      </Card>
 
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList>
           <TabsTrigger value="profile">
             <User className="h-4 w-4 mr-2" />
-            個人資料
+            {t("settings.profile")}
           </TabsTrigger>
           <TabsTrigger value="subscription">
             <CreditCard className="h-4 w-4 mr-2" />
-            訂閱方案
+            {t("settings.subscription")}
           </TabsTrigger>
           <TabsTrigger value="notifications">
             <Bell className="h-4 w-4 mr-2" />
-            通知設定
+            {t("settings.notifications")}
           </TabsTrigger>
           <TabsTrigger value="mobile">
             <Smartphone className="h-4 w-4 mr-2" />
-            行動版整合
+            {t("settings.mobile")}
           </TabsTrigger>
         </TabsList>
 
@@ -198,9 +162,9 @@ function SettingsContent() {
         <TabsContent value="profile" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>個人資料</CardTitle>
+              <CardTitle>{copy("個人資料", "Profile details")}</CardTitle>
               <CardDescription>
-                更新你的個人資訊
+                {copy("更新你的個人資訊", "Update your personal information")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -220,17 +184,17 @@ function SettingsContent() {
                       className="bg-muted"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Email 無法變更
+                      {copy("Email 無法變更", "Email cannot be changed")}
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="name">姓名</Label>
+                    <Label htmlFor="name">{copy("姓名", "Name")}</Label>
                     <Input
                       id="name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="輸入你的姓名"
+                      placeholder={copy("輸入你的姓名", "Enter your name")}
                     />
                   </div>
 
@@ -242,7 +206,7 @@ function SettingsContent() {
                     ) : (
                       <Save className="h-4 w-4 mr-2" />
                     )}
-                    {isSaving ? "儲存中..." : saveSuccess ? "已儲存" : "儲存變更"}
+                    {isSaving ? copy("儲存中...", "Saving...") : saveSuccess ? copy("已儲存", "Saved") : copy("儲存變更", "Save changes")}
                   </Button>
                 </>
               )}
@@ -251,22 +215,22 @@ function SettingsContent() {
 
           <Card>
             <CardHeader>
-              <CardTitle>帳戶安全</CardTitle>
+              <CardTitle>{copy("帳戶安全", "Account security")}</CardTitle>
               <CardDescription>
-                管理你的帳戶安全設定
+                {copy("管理你的帳戶安全設定", "Manage your account security")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <p className="font-medium">登出帳戶</p>
+                  <p className="font-medium">{copy("登出帳戶", "Sign out")}</p>
                   <p className="text-sm text-muted-foreground">
-                    登出目前的裝置
+                    {copy("登出目前的裝置", "Sign out of this device")}
                   </p>
                 </div>
                 <Button variant="outline" onClick={handleSignOut}>
                   <LogOut className="h-4 w-4 mr-2" />
-                  登出
+                  {copy("登出", "Sign out")}
                 </Button>
               </div>
             </CardContent>
@@ -278,7 +242,7 @@ function SettingsContent() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                目前方案
+                {copy("目前方案", "Current plan")}
                 {profile && (
                   <Badge variant={profile.subscription_tier === "free" ? "secondary" : "default"}>
                     {subscriptionLabels[profile.subscription_tier]}
@@ -286,7 +250,7 @@ function SettingsContent() {
                 )}
               </CardTitle>
               <CardDescription>
-                管理你的訂閱和 AI 使用額度
+                {copy("管理你的訂閱和 AI 使用額度", "Manage your plan and AI credits")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -299,26 +263,26 @@ function SettingsContent() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Sparkles className="h-4 w-4 text-primary" />
-                        <span className="font-medium">AI 使用額度</span>
+                        <span className="font-medium">{copy("AI 使用額度", "AI credits")}</span>
                       </div>
                       <span className="text-sm text-muted-foreground">
-                        {profile?.ai_credits_remaining} / 100 點
+                        {profile?.ai_credits_remaining} / 100 {copy("點", "credits")}
                       </span>
                     </div>
                     <Progress value={aiCreditsPercentage} />
                     <p className="text-xs text-muted-foreground">
-                      每月重置，用於 AI 優化、JD 分析、面試評分等功能
+                      {copy("每月重置，用於 AI 優化、JD 分析、面試評分等功能", "Credits reset monthly and are used for resume optimization, job analysis, and interview feedback.")}
                     </p>
                   </div>
 
                   {/* 使用統計 */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-lg bg-muted/50">
-                      <p className="text-sm text-muted-foreground">本月 JD 分析</p>
+                      <p className="text-sm text-muted-foreground">{copy("本月 JD 分析", "Job analyses this month")}</p>
                       <p className="text-2xl font-bold">{profile?.monthly_jd_count || 0}</p>
                     </div>
                     <div className="p-4 rounded-lg bg-muted/50">
-                      <p className="text-sm text-muted-foreground">本月公司查詢</p>
+                      <p className="text-sm text-muted-foreground">{copy("本月公司查詢", "Company lookups this month")}</p>
                       <p className="text-2xl font-bold">{profile?.monthly_crawl_count || 0}</p>
                     </div>
                   </div>
@@ -333,29 +297,29 @@ function SettingsContent() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Zap className="h-5 w-5 text-primary" />
-                  升級到 Pro
+                  {copy("升級到 Pro", "Upgrade to Pro")}
                 </CardTitle>
                 <CardDescription>
-                  解鎖更多 AI 功能和使用額度
+                  {copy("解鎖更多 AI 功能和使用額度", "Unlock more AI features and credits")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    每月 500 AI 使用額度
+                    {copy("每月 500 AI 使用額度", "500 AI credits per month")}
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    無限 JD 分析次數
+                    {copy("無限 JD 分析次數", "Unlimited job description analyses")}
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    GPT-4 深度優化
+                    {copy("GPT-4 深度優化", "Advanced GPT-4 optimization")}
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    優先客服支援
+                    {copy("優先客服支援", "Priority support")}
                   </li>
                 </ul>
 
@@ -363,11 +327,11 @@ function SettingsContent() {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-bold text-lg">$9.99 / 月</p>
-                    <p className="text-sm text-muted-foreground">年繳享 8 折優惠</p>
+                    <p className="font-bold text-lg">$9.99 / {copy("月", "month")}</p>
+                    <p className="text-sm text-muted-foreground">{copy("年繳享 8 折優惠", "Save 20% with annual billing")}</p>
                   </div>
                   <Button>
-                    升級方案
+                    {copy("升級方案", "Upgrade plan")}
                   </Button>
                 </div>
               </CardContent>
@@ -379,17 +343,17 @@ function SettingsContent() {
         <TabsContent value="notifications" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>通知偏好</CardTitle>
+              <CardTitle>{copy("通知偏好", "Notification preferences")}</CardTitle>
               <CardDescription>
-                選擇你想要接收的通知類型
+                {copy("選擇你想要接收的通知類型", "Choose which notifications you want to receive")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <p className="font-medium">Email 通知</p>
+                  <p className="font-medium">{copy("Email 通知", "Email notifications")}</p>
                   <p className="text-sm text-muted-foreground">
-                    接收重要更新和提醒的 Email
+                    {copy("接收重要更新和提醒的 Email", "Receive important updates and reminders by email")}
                   </p>
                 </div>
                 <Switch
@@ -402,9 +366,9 @@ function SettingsContent() {
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <p className="font-medium">每週摘要</p>
+                  <p className="font-medium">{copy("每週摘要", "Weekly digest")}</p>
                   <p className="text-sm text-muted-foreground">
-                    每週一封求職進度摘要 Email
+                    {copy("每週一封求職進度摘要 Email", "A weekly summary of your job search progress")}
                   </p>
                 </div>
                 <Switch
@@ -418,9 +382,9 @@ function SettingsContent() {
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <p className="font-medium">面試提醒</p>
+                  <p className="font-medium">{copy("面試提醒", "Interview reminders")}</p>
                   <p className="text-sm text-muted-foreground">
-                    面試前一天收到提醒
+                    {copy("面試前一天收到提醒", "Get a reminder one day before an interview")}
                   </p>
                 </div>
                 <Switch
@@ -434,23 +398,23 @@ function SettingsContent() {
 
           <Card>
             <CardHeader>
-              <CardTitle>隱私設定</CardTitle>
+              <CardTitle>{copy("隱私設定", "Privacy")}</CardTitle>
               <CardDescription>
-                控制你的資料隱私
+                {copy("控制你的資料隱私", "Control how your data is handled")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Shield className="h-4 w-4" />
-                <span>你的資料使用 AES-256 加密儲存</span>
+                <span>{copy("你的資料使用 AES-256 加密儲存", "Your data is encrypted at rest using AES-256")}</span>
               </div>
 
               <p className="text-sm text-muted-foreground">
-                我們絕不會將你的個人資料分享給第三方。你的履歷和求職記錄僅供你本人使用。
+                {copy("我們絕不會將你的個人資料分享給第三方。你的履歷和求職記錄僅供你本人使用。", "We do not share your personal information with third parties. Your resumes and job search records are for your use only.")}
               </p>
 
               <Button variant="outline" size="sm">
-                下載我的資料
+                {copy("下載我的資料", "Download my data")}
               </Button>
             </CardContent>
           </Card>
@@ -462,7 +426,7 @@ function SettingsContent() {
             <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <AlertDescription className="text-green-700 dark:text-green-300">
-                Gmail 已成功連結！現在可以自動建立求職信草稿了。
+                {copy("Gmail 已成功連結！現在可以自動建立求職信草稿了。", "Gmail connected. You can now create email drafts.")}
               </AlertDescription>
             </Alert>
           )}
@@ -472,20 +436,20 @@ function SettingsContent() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Smartphone className="h-5 w-5" />
-                Apple 捷徑
+                Apple Shortcuts
               </CardTitle>
               <CardDescription>
-                在手機上分享職缺連結，自動完成追蹤和履歷客製化
+                {copy("在手機上分享職缺連結，自動完成追蹤和履歷客製化", "Share a job link from your phone to track it and tailor a resume.")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 rounded-lg bg-muted/50 space-y-3">
-                <h4 className="font-medium">使用方式</h4>
+                <h4 className="font-medium">{copy("使用方式", "How it works")}</h4>
                 <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-                  <li>下載並安裝 Apple 捷徑</li>
-                  <li>在 Safari 或任何 App 中看到職缺連結</li>
-                  <li>點擊「分享」→ 選擇「JobSmart 快速追蹤」</li>
-                  <li>系統會自動解析、查評價、客製化履歷</li>
+                  <li>{copy("下載並安裝 Apple 捷徑", "Download and install the Apple Shortcut")}</li>
+                  <li>{copy("在 Safari 或任何 App 中看到職缺連結", "Find a job link in Safari or another app")}</li>
+                  <li>{copy("點擊「分享」→ 選擇「JobSmart 快速追蹤」", "Tap Share, then choose JobSmart Quick Track")}</li>
+                  <li>{copy("系統會自動解析、查評價、客製化履歷", "JobSmart parses the listing, checks company reviews, and tailors your resume")}</li>
                 </ol>
               </div>
 
@@ -497,16 +461,16 @@ function SettingsContent() {
                     rel="noopener noreferrer"
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    下載捷徑
+                    {copy("下載捷徑", "Download shortcut")}
                   </a>
                 </Button>
                 <Button variant="outline" asChild>
                   <a
-                    href="https://support.apple.com/zh-tw/guide/shortcuts/welcome/ios"
+                    href="https://support.apple.com/guide/shortcuts/welcome/ios"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    說明文件
+                    {copy("說明文件", "Documentation")}
                   </a>
                 </Button>
               </div>
@@ -518,16 +482,16 @@ function SettingsContent() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5" />
-                Gmail 連結
+                {copy("Gmail 連結", "Gmail connection")}
                 {profile?.gmail_connected && (
                   <Badge variant="secondary" className="ml-2">
                     <Check className="h-3 w-3 mr-1" />
-                    已連結
+                    {copy("已連結", "Connected")}
                   </Badge>
                 )}
               </CardTitle>
               <CardDescription>
-                連結 Gmail 後，系統可自動建立求職信草稿
+                {copy("連結 Gmail 後，系統可自動建立求職信草稿", "Connect Gmail to create job application email drafts.")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -541,7 +505,7 @@ function SettingsContent() {
                       <div>
                         <p className="font-medium">{profile.gmail_email}</p>
                         <p className="text-sm text-muted-foreground">
-                          已連結的 Gmail 帳戶
+                          {copy("已連結的 Gmail 帳戶", "Connected Gmail account")}
                         </p>
                       </div>
                     </div>
@@ -550,7 +514,7 @@ function SettingsContent() {
                       size="sm"
                       onClick={async () => {
                         // TODO: 實作斷開連結
-                        if (confirm("確定要斷開 Gmail 連結嗎？")) {
+                        if (confirm(copy("確定要斷開 Gmail 連結嗎？", "Disconnect Gmail?"))) {
                           const response = await fetch("/api/auth/gmail/disconnect", {
                             method: "POST",
                           });
@@ -561,22 +525,22 @@ function SettingsContent() {
                       }}
                     >
                       <Unlink className="h-4 w-4 mr-1" />
-                      斷開
+                      {copy("斷開", "Disconnect")}
                     </Button>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    當職缺要求「寄履歷到 xxx@company.com」時，系統會自動在你的 Gmail 草稿中建立求職信。
+                    {copy("當職缺要求「寄履歷到 xxx@company.com」時，系統會自動在你的 Gmail 草稿中建立求職信。", "When a job asks you to email your resume, JobSmart creates an application email draft in Gmail.")}
                   </p>
                 </>
               ) : (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    連結後，當系統偵測到職缺要求寄 Email 時，會自動建立草稿供你檢視和發送。
+                    {copy("連結後，當系統偵測到職缺要求寄 Email 時，會自動建立草稿供你檢視和發送。", "When a listing asks you to apply by email, JobSmart creates a draft for you to review and send.")}
                   </p>
                   <Button asChild>
                     <a href="/api/auth/gmail">
                       <Link2 className="h-4 w-4 mr-2" />
-                      連結 Gmail
+                      {copy("連結 Gmail", "Connect Gmail")}
                     </a>
                   </Button>
                 </>
@@ -584,193 +548,6 @@ function SettingsContent() {
             </CardContent>
           </Card>
 
-          {/* LINE 連結 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="text-green-500"
-                >
-                  <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
-                </svg>
-                LINE 官方帳號
-                {lineBinding?.connected && (
-                  <Badge variant="secondary" className="ml-2">
-                    <Check className="h-3 w-3 mr-1" />
-                    已連結
-                  </Badge>
-                )}
-              </CardTitle>
-              <CardDescription>
-                連結 LINE 後，直接在聊天室分享職缺連結即可追蹤
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isLoadingLine ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-16 w-full" />
-                  <Skeleton className="h-10 w-32" />
-                </div>
-              ) : lineBinding?.connected ? (
-                <>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 dark:bg-green-950">
-                    <div className="flex items-center gap-3">
-                      {lineBinding.binding?.pictureUrl ? (
-                        <img
-                          src={lineBinding.binding.pictureUrl}
-                          alt={lineBinding.binding.displayName || "LINE"}
-                          className="h-10 w-10 rounded-full"
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="text-green-600"
-                          >
-                            <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
-                          </svg>
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-medium">
-                          {lineBinding.binding?.displayName || "LINE 用戶"}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          已連結的 LINE 帳號
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleUnlinkLine}
-                      disabled={isUnlinkingLine}
-                    >
-                      {isUnlinkingLine ? (
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      ) : (
-                        <Unlink className="h-4 w-4 mr-1" />
-                      )}
-                      解除
-                    </Button>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/50 space-y-2">
-                    <h4 className="font-medium text-sm">使用方式</h4>
-                    <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>在 LINE 聊天室直接貼上職缺連結</li>
-                      <li>或從其他 App 分享到 LINE 官方帳號</li>
-                      <li>系統會自動處理並通知你結果</li>
-                    </ol>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    連結 LINE 後，你可以直接在聊天室分享職缺連結，系統會自動解析、查詢公司評價、客製化履歷，並推送結果通知給你。
-                  </p>
-                  <div className="p-4 rounded-lg bg-muted/50 space-y-3">
-                    <h4 className="font-medium">連結步驟</h4>
-                    <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-                      <li>加入 JobSmart LINE 官方帳號</li>
-                      <li>在聊天室中點擊連結帳號按鈕</li>
-                      <li>使用 Google 登入完成綁定</li>
-                    </ol>
-                  </div>
-                  <Button
-                    className="bg-green-500 hover:bg-green-600"
-                    asChild
-                  >
-                    <a
-                      href="https://line.me/R/ti/p/@jobsmart"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="mr-2"
-                      >
-                        <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
-                      </svg>
-                      加入 LINE 官方帳號
-                    </a>
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* 自動化設定 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>自動化設定</CardTitle>
-              <CardDescription>
-                設定透過捷徑新增職缺時的自動化行為
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="font-medium">自動客製化履歷</p>
-                  <p className="text-sm text-muted-foreground">
-                    根據職缺自動選擇履歷版本並客製化
-                  </p>
-                </div>
-                <Switch
-                  checked={autoCustomize}
-                  onCheckedChange={setAutoCustomize}
-                />
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="font-medium">自動查詢公司評價</p>
-                  <p className="text-sm text-muted-foreground">
-                    自動爬取 Dcard、PTT、Qollie 評價
-                  </p>
-                </div>
-                <Switch
-                  checked={autoCompanyReview}
-                  onCheckedChange={setAutoCompanyReview}
-                />
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="font-medium">自動建立 Email 草稿</p>
-                  <p className="text-sm text-muted-foreground">
-                    偵測到需要寄 Email 時自動建立草稿
-                  </p>
-                </div>
-                <Switch
-                  checked={autoDraftEmail}
-                  onCheckedChange={setAutoDraftEmail}
-                  disabled={!profile?.gmail_connected}
-                />
-              </div>
-              {!profile?.gmail_connected && (
-                <p className="text-xs text-muted-foreground">
-                  需先連結 Gmail 才能使用此功能
-                </p>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>

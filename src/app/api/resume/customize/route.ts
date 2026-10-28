@@ -11,6 +11,7 @@ import {
 const customizeSchema = z.object({
   versionId: z.string().uuid("無效的版本 ID"),
   jobApplicationId: z.string().uuid("無效的工作 ID"),
+  additionalContext: z.string().max(5000).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { versionId, jobApplicationId } = customizeSchema.parse(body);
+    const { versionId, jobApplicationId, additionalContext } = customizeSchema.parse(body);
 
     // 取得版本資訊（包含基礎履歷）
     const version = await getResumeVersion(versionId);
@@ -113,7 +114,8 @@ export async function POST(request: NextRequest) {
       baseResumeText,
       jdContent,
       jobApplication.company_name,
-      jobApplication.position
+      jobApplication.position,
+      additionalContext
     );
 
     // 儲存結果

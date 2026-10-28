@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
 import { ApplicationCard } from "@/components/kanban/application-card";
 import { Button } from "@/components/ui/button";
@@ -24,10 +25,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Eye, EyeOff, Sparkles, MoreHorizontal, Trash2, ExternalLink, FileText, Save, Search, X } from "lucide-react";
+import { Plus, Loader2, Eye, EyeOff, Sparkles, MoreHorizontal, Trash2, ExternalLink, Save, Search, X, Check, FileText, BriefcaseBusiness, Heart, BookmarkCheck, Send } from "lucide-react";
 import { toast } from "sonner";
 import { AddApplicationDialog } from "@/components/kanban/add-application-dialog";
 import { JobCategoryTabs } from "@/components/job-category-tabs";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useJobCategoryContext } from "@/contexts/job-category-context";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -35,6 +37,7 @@ import {
   createJobApplication,
   updateJobApplication,
   getResumeVersions,
+  getValueRanking,
   updateVersionJobResume,
 } from "@/lib/turso/db";
 import type { JobApplication, ApplicationStatus, JDContentZh } from "@/types";
@@ -56,6 +59,7 @@ const customCollisionDetection: CollisionDetection = (args) => {
 };
 
 export default function ApplicationsPage() {
+  const router = useRouter();
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -64,15 +68,16 @@ export default function ApplicationsPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [automationRunning, setAutomationRunning] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [automationSettings, setAutomationSettings] = useState({ enabled: false, frequency: "daily", mode: "review", query: "AI product manager", nextRunAt: null as string | null });
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [jobLeads, setJobLeads] = useState<Array<{ id: string; company: string; role: string; url: string; source: string; status: string; snippet: string }>>([]);
   const [activeLead, setActiveLead] = useState<(typeof jobLeads)[number] | null>(null);
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
+  const [hasValueRanking, setHasValueRanking] = useState(false);
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [jdDraft, setJdDraft] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
-  const [prepared, setPrepared] = useState<{ applicationId: string; relationId: string; versionId: string; versionName: string; customizedContent: string; atsScore: number; matchedKeywords: string[]; missingKeywords: string[]; suggestions: string[] } | null>(null);
+  const [prepared, setPrepared] = useState<{ applicationId: string; relationId: string; versionId: string; versionName: string; customizedContent: string; atsScore: number; matchedKeywords: string[]; missingKeywords: string[]; suggestions: string[]; audit: { status: "passed" | "needs_attention"; summary: string; findings: Array<{ claim: string; status: string; evidence: string; reason: string }>; requirements: Array<{ requirement: string; priority: string; evidence: string; status: string }> } } | null>(null);
   const [draftContent, setDraftContent] = useState("");
 
   const { selectedCategoryId } = useJobCategoryContext();
@@ -122,6 +127,54 @@ export default function ApplicationsPage() {
     return stats;
   }, [applications]);
 
+  const appliedCount = useMemo(() => applications.filter((app) =>
+    app.applied_at !== null || !["wishlist", "editing"].includes(app.status)
+  ).length, [applications]);
+
+  const progressSteps = useMemo(() => [
+    {
+      label: "增加一份履歷",
+      detail: resumeVersions.length > 0 ? `${resumeVersions.length} 份履歷` : "尚未新增",
+      href: "/resume",
+      complete: resumeVersions.length > 0,
+      icon: FileText,
+    },
+    {
+      label: "設定要找的工作",
+      detail: resumeVersions.some((version) => Boolean(version.target_role?.trim())) ? "已設定" : "尚未設定",
+      href: "/resume",
+      complete: resumeVersions.some((version) => Boolean(version.target_role?.trim())),
+      icon: BriefcaseBusiness,
+    },
+    {
+      label: "排價值觀卡牌",
+      detail: hasValueRanking ? "已完成" : "可以跳過",
+      href: "/values",
+      complete: hasValueRanking,
+      optional: true,
+      icon: Heart,
+    },
+    {
+      label: "儲存 10 個職缺",
+      detail: `${Math.min(applications.length, 10)} / 10`,
+      href: "/applications",
+      complete: applications.length >= 10,
+      icon: BookmarkCheck,
+    },
+    {
+      label: "投出 10 份履歷",
+      detail: `${Math.min(appliedCount, 10)} / 10`,
+      href: "/applications",
+      complete: appliedCount >= 10,
+      icon: Send,
+    },
+  ], [applications.length, appliedCount, hasValueRanking, resumeVersions]);
+
+  const requiredProgress = useMemo(() => {
+    const requiredSteps = progressSteps.filter((step) => !step.optional);
+    return Math.round((requiredSteps.filter((step) => step.complete).length / requiredSteps.length) * 100);
+  }, [progressSteps]);
+
   const handleAddClick = (status: ApplicationStatus) => {
     setAddDialogStatus(status);
     setIsAddDialogOpen(true);
@@ -141,20 +194,23 @@ export default function ApplicationsPage() {
 
   const loadAutomation = useCallback(async () => {
     try {
-      const [settingsResponse, queueResponse, versions] = await Promise.all([fetch("/api/automation/settings"), fetch("/api/automation/queue"), getResumeVersions()]);
-      if (settingsResponse.ok) setAutomationSettings((await settingsResponse.json()).data);
+      const [queueResponse, versions, valueRanking] = await Promise.all([
+        fetch("/api/automation/queue"),
+        getResumeVersions(),
+        getValueRanking(),
+      ]);
       if (queueResponse.ok) {
         const rows = (await queueResponse.json()).data as typeof jobLeads;
         setJobLeads(rows.filter((lead, index, all) => all.findIndex((item) => item.url === lead.url) === index));
       }
       setResumeVersions(versions);
+      setHasValueRanking(Boolean(valueRanking));
       setSelectedVersionId((current) => current || versions.find((version) => version.is_active)?.id || versions[0]?.id || "");
     } catch (error) { console.error("Failed to load automation:", error); }
   }, []);
 
   useEffect(() => {
-    loadApplications();
-    loadAutomation();
+    loadAutomation().then(loadApplications);
   }, [loadApplications, loadAutomation]);
 
   const runAutomation = async () => {
@@ -164,14 +220,10 @@ export default function ApplicationsPage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "搜尋失敗");
       await loadAutomation();
+      await loadApplications();
       toast.success(`找到 ${result.data.discovered} 個候選職缺`);
     } catch (error) { toast.error(error instanceof Error ? error.message : "搜尋失敗，請稍後重試"); }
     finally { setAutomationRunning(false); }
-  };
-
-  const saveAutomation = async (next: typeof automationSettings) => {
-    setAutomationSettings(next);
-    await fetch("/api/automation/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
   };
 
   const openLead = (lead: (typeof jobLeads)[number]) => {
@@ -205,10 +257,13 @@ export default function ApplicationsPage() {
     if (!prepared) return;
     setSavingDraft(true);
     try {
-      const saved = await updateVersionJobResume(prepared.relationId, { customized_plain_text: draftContent, generation_status: "completed" });
+      const response = await fetch("/api/resume/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versionId: prepared.versionId, applicationId: prepared.applicationId, draft: draftContent, jdContent: jdDraft }) });
+      const reviewed = await response.json();
+      if (!response.ok) throw new Error(reviewed.error || "履歷事實審核失敗");
+      const saved = await updateVersionJobResume(prepared.relationId, { customized_plain_text: draftContent, generation_status: "completed", ai_suggestions: { suggestions: prepared.suggestions, audit: reviewed.data.audit } });
       if (!saved) throw new Error("儲存失敗");
-      setPrepared({ ...prepared, customizedContent: draftContent });
-      toast.success("履歷草稿已儲存");
+      setPrepared({ ...prepared, customizedContent: draftContent, audit: reviewed.data.audit });
+      toast.success("草稿已儲存並重新完成事實審核");
     } catch (error) { toast.error(error instanceof Error ? error.message : "儲存失敗"); }
     finally { setSavingDraft(false); }
   };
@@ -228,6 +283,30 @@ export default function ApplicationsPage() {
     if (!response.ok) { toast.error("刪除失敗，請重試"); return; }
     setJobLeads((prev) => prev.filter((lead) => lead.id !== id));
     toast.success("已移除候選職缺");
+  };
+
+  const approveApplication = async (application: JobApplication) => {
+    if (!resumeVersions.length) {
+      toast.error("請先新增你的原始履歷");
+      router.push("/resume?create=1");
+      return;
+    }
+    const version = resumeVersions.find((item) => item.is_active) || resumeVersions[0];
+    try {
+      const response = await fetch("/api/applications/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId: application.id, versionId: version.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "履歷準備失敗");
+      if (result.data.application) {
+        setApplications((previous) => previous.map((item) => item.id === application.id ? result.data.application : item));
+      }
+      toast.success(`已使用「${version.name}」建立客製履歷`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "履歷準備失敗，請稍後重試");
+    }
   };
   const handleStatusChange = async (applicationId: string, newStatus: ApplicationStatus) => {
     // 樂觀更新 UI
@@ -437,23 +516,6 @@ export default function ApplicationsPage() {
     );
   }
 
-  const pendingLeads = jobLeads.filter((lead) => lead.status === "queued");
-  const queueCards = pendingLeads.length > 0 ? (
-    <div className="mb-3 space-y-2" aria-label="待評估職缺">
-      {pendingLeads.slice(0, 5).map((lead) => <article key={lead.id} className="rounded-xl border bg-card p-3 shadow-sm">
-        <div className="flex items-start justify-between gap-2">
-          <button className="min-w-0 flex-1 text-left" onClick={() => openLead(lead)}>
-            <p className="truncate text-sm font-semibold">{lead.role}</p><p className="truncate text-xs text-muted-foreground">{lead.company}</p>
-          </button>
-          <details className="relative"><summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md text-muted-foreground hover:bg-muted" aria-label="更多操作"><MoreHorizontal className="h-4 w-4" /></summary><div className="absolute right-0 z-10 mt-1 w-28 rounded-md border bg-popover p-1 shadow"><button className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-destructive hover:bg-muted" onClick={() => deleteLead(lead.id)}><Trash2 className="h-3.5 w-3.5" />移除候選職缺</button></div></details>
-        </div>
-        <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{lead.snippet || "尚未取得職缺描述，開啟後可貼上完整 JD。"}</p>
-        <Button size="sm" variant="secondary" className="mt-3 h-8 w-full" onClick={() => openLead(lead)}><FileText className="mr-2 h-3.5 w-3.5" />檢視 JD 並準備履歷</Button>
-      </article>)}
-      {pendingLeads.length > 5 && <p className="px-1 text-center text-xs text-muted-foreground">另有 {pendingLeads.length - 5} 個候選職缺</p>}
-    </div>
-  ) : null;
-
   return (
     <DndContext
       sensors={sensors}
@@ -463,17 +525,16 @@ export default function ApplicationsPage() {
       onDragCancel={handleDragCancel}
     >
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">求職追蹤</h1>
-            <p className="text-muted-foreground">
-              先確認職缺與履歷，再決定是否投遞
-            </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            {!isMobile && <SidebarTrigger className="-ml-1" />}
+            <h1 className="shrink-0 text-2xl font-bold">求職追蹤</h1>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button size="sm" onClick={runAutomation} disabled={automationRunning}><Sparkles className="mr-1 h-4 w-4" />{automationRunning ? "搜尋中" : "AI 找職缺"}</Button>
-            <label className="relative hidden sm:block"><span className="sr-only">搜尋公司或職稱</span><Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋公司、職稱" className="h-9 w-48 pl-8 pr-8" />{searchQuery && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="清除搜尋" onClick={() => setSearchQuery("")}><X className="h-3.5 w-3.5" /></button>}</label>
-            <select aria-label="職缺準備確認方式" className="h-9 rounded-md border bg-transparent px-2 text-xs" value={automationSettings.mode === "ask" ? "ask" : "review"} onChange={(e) => saveAutomation({ ...automationSettings, mode: e.target.value })}><option value="review">逐職缺確認</option><option value="ask">逐步確認</option></select>
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+            <JobCategoryTabs className="h-8 shrink-0" showStats stats={categoryStats} totalCount={applications.length} />
+            <Button size="sm" className="px-2 sm:px-3" onClick={runAutomation} disabled={automationRunning} aria-label={automationRunning ? "搜尋中" : "AI 找職缺"} title={automationRunning ? "搜尋中" : "AI 找職缺"}><Sparkles className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">{automationRunning ? "搜尋中" : "AI 找職缺"}</span></Button>
+            <label className="relative hidden md:block"><span className="sr-only">搜尋公司或職稱</span><Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋公司或職稱" className="h-9 w-64 pl-8 pr-8" />{searchQuery && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="清除搜尋" onClick={() => setSearchQuery("")}><X className="h-3.5 w-3.5" /></button>}</label>
+            <Button variant="outline" size="icon" className="md:hidden" aria-label="搜尋公司或職稱" title="搜尋公司或職稱" onClick={() => setShowMobileSearch((value) => !value)}><Search className="h-4 w-4" /></Button>
             <Button
               variant="outline"
               size="icon"
@@ -486,17 +547,44 @@ export default function ApplicationsPage() {
                 <Eye className="h-4 w-4" />
               )}
             </Button>
-            <Button onClick={() => setIsAddDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              新增追蹤
+            <Button className="px-2 sm:px-4" onClick={() => setIsAddDialogOpen(true)} aria-label="新增追蹤" title="新增追蹤">
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">新增追蹤</span>
             </Button>
           </div>
         </div>
 
-        <div className="sm:hidden"><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋公司或職稱" className="h-10 pl-9" />{searchQuery && <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="清除搜尋" onClick={() => setSearchQuery("")}><X className="h-4 w-4" /></button>}</div></div>
+        <section className="overflow-x-auto rounded-lg border bg-card shadow-sm" aria-labelledby="job-search-progress-title">
+          <div className="flex min-w-max items-center gap-1.5 px-2.5 py-1.5">
+            <div className="flex items-center gap-1.5 border-r pr-2">
+              <h2 id="job-search-progress-title" className="text-xs font-semibold">找工作進度</h2>
+              <span className="text-xs font-semibold tabular-nums text-primary">{requiredProgress}%</span>
+              <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${requiredProgress}%` }} />
+              </div>
+            </div>
+            {progressSteps.map((step) => {
+              const StepIcon = step.icon;
+              return (
+                <Link
+                  key={step.label}
+                  href={step.href}
+                  className="group flex items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors hover:bg-muted"
+                >
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${step.complete ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                    {step.complete ? <Check className="h-3 w-3" /> : <StepIcon className="h-3 w-3" />}
+                  </span>
+                  <span className="text-xs font-medium group-hover:text-primary">{step.label}</span>
+                  {!step.complete && (step.label === "儲存 10 個職缺" || step.label === "投出 10 份履歷" || step.optional) && (
+                    <span className="text-[11px] tabular-nums text-muted-foreground">{step.detail}</span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
 
-        {/* 職位類別 Tab */}
-        <JobCategoryTabs showStats stats={categoryStats} totalCount={applications.length} />
+        {showMobileSearch && <div className="md:hidden"><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋公司或職稱" className="h-10 pl-9" />{searchQuery && <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="清除搜尋" onClick={() => setSearchQuery("")}><X className="h-4 w-4" /></button>}</div></div>}
 
         {searchQuery && filteredApplications.length === 0 && <div className="rounded-xl border border-dashed px-4 py-8 text-center"><p className="text-sm font-medium">找不到符合「{searchQuery}」的職缺</p><button className="mt-1 text-xs text-primary hover:underline" onClick={() => setSearchQuery("")}>清除搜尋</button></div>}
 
@@ -505,7 +593,7 @@ export default function ApplicationsPage() {
           showSummaries={showAllSummaries}
           onApplicationUpdate={handleApplicationUpdate}
           onAddClick={handleAddClick}
-          firstColumnContent={queueCards}
+          onApproveApplication={approveApplication}
         />
 
         <AddApplicationDialog
@@ -533,11 +621,13 @@ export default function ApplicationsPage() {
             <div className="space-y-2"><label className="text-sm font-medium">用哪一份既有履歷？</label>{resumeVersions.length ? <Select value={selectedVersionId} onValueChange={setSelectedVersionId}><SelectTrigger><SelectValue placeholder="選擇履歷版本" /></SelectTrigger><SelectContent>{resumeVersions.map((version) => <SelectItem key={version.id} value={version.id}>{version.name}{version.is_active ? " · 主要履歷" : ""}</SelectItem>)}</SelectContent></Select> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">尚無可用的履歷版本。<Link className="ml-1 text-primary hover:underline" href="/resume">先建立履歷</Link>，再回來準備這個職缺。</div>}</div>
             <p className="rounded-lg bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">AI 會建立一份獨立草稿，不會覆寫原履歷。適配與 ATS 分數是估算結果；請確認每項經歷都真實、可佐證。</p>
           </div> : <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
-              <div className="rounded-xl border p-4"><p className="text-xs text-muted-foreground">AI 預估 ATS 分數</p><p className="mt-1 text-3xl font-semibold">{prepared.atsScore}<span className="text-base font-normal text-muted-foreground">/100</span></p><p className="mt-1 text-[11px] text-muted-foreground">估算值，不代表錄取機率</p></div>
+            <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-1"><div className="rounded-xl border p-3"><p className="text-[11px] text-muted-foreground">AI 預估 ATS</p><p className="mt-1 text-2xl font-semibold">{prepared.atsScore}<span className="text-sm font-normal text-muted-foreground">/100</span></p><p className="mt-1 text-[10px] text-muted-foreground">估算值，不代表錄取機率</p></div><div className="rounded-xl border p-3"><p className="text-[11px] text-muted-foreground">JD 關鍵字吻合</p><p className="mt-1 text-2xl font-semibold">{prepared.matchedKeywords.length + prepared.missingKeywords.length ? Math.round(prepared.matchedKeywords.length / (prepared.matchedKeywords.length + prepared.missingKeywords.length) * 100) : "—"}<span className="text-sm font-normal text-muted-foreground">{prepared.matchedKeywords.length + prepared.missingKeywords.length ? "%" : ""}</span></p><p className="mt-1 text-[10px] text-muted-foreground">依 AI 列出的關鍵字估算</p></div></div>
               <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border p-3"><p className="mb-2 text-xs font-medium">已涵蓋關鍵字 · {prepared.matchedKeywords.length}</p><div className="flex flex-wrap gap-1.5">{prepared.matchedKeywords.length ? prepared.matchedKeywords.slice(0, 12).map((word) => <span key={word} className="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-700 dark:text-emerald-300">{word}</span>) : <span className="text-xs text-muted-foreground">沒有可確認的匹配項</span>}</div></div><div className="rounded-xl border p-3"><p className="mb-2 text-xs font-medium">尚未涵蓋 · {prepared.missingKeywords.length}</p><div className="flex flex-wrap gap-1.5">{prepared.missingKeywords.length ? prepared.missingKeywords.slice(0, 12).map((word) => <span key={word} className="rounded-full bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-300">{word}</span>) : <span className="text-xs text-muted-foreground">無</span>}</div></div></div>
             </div>
-            {prepared.suggestions.length > 0 && <div className="rounded-lg border p-3"><p className="mb-1 text-xs font-medium">需要你確認</p><ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">{prepared.suggestions.map((suggestion, index) => <li key={`${index}-${suggestion}`}>{suggestion}</li>)}</ul></div>}
+            <div className={`rounded-lg border p-3 ${prepared.audit.status === "passed" ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}><p className="text-xs font-semibold">事實審核 · {prepared.audit.status === "passed" ? "未發現無根據主張" : "有項目需要確認"}</p><p className="mt-1 text-xs text-muted-foreground">{prepared.audit.summary}</p>{prepared.audit.findings.filter((finding) => finding.status !== "supported").map((finding, index) => <div key={`${index}-${finding.claim}`} className="mt-2 rounded border bg-background p-2 text-xs"><p className="font-medium">{finding.status === "exaggerated" ? "責任或成果可能被放大" : "缺少履歷依據"}：{finding.claim}</p><p className="mt-1 text-muted-foreground">{finding.reason}{finding.evidence ? ` · 原履歷依據：${finding.evidence}` : ""}</p></div>)}</div>
+            <div className="rounded-lg border p-3"><p className="mb-2 text-xs font-medium">JD 條件與履歷證據</p><div className="space-y-2">{prepared.audit.requirements.map((item, index) => <div key={`${index}-${item.requirement}`} className="flex items-start justify-between gap-3 text-xs"><div><span className="font-medium">{item.requirement}</span><p className="mt-0.5 text-muted-foreground">{item.evidence || "履歷未提供可引用證據"}</p></div><span className="shrink-0 text-muted-foreground">{item.priority === "required" ? "必要" : "加分"} · {item.status === "supported" ? "有證據" : item.status === "partial" ? "部分符合" : "缺口"}</span></div>)}</div></div>
+            {prepared.suggestions.length > 0 && <div className="rounded-lg border p-3"><p className="mb-1 text-xs font-medium">改善建議</p><ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">{prepared.suggestions.map((suggestion, index) => <li key={`${index}-${suggestion}`}>{suggestion}</li>)}</ul></div>}
             <div className="space-y-2"><div className="flex items-center justify-between gap-2"><label className="text-sm font-medium" htmlFor="tailored-resume">履歷客製草稿 · {prepared.versionName}</label><a className="shrink-0 text-xs text-primary hover:underline" href={`/resume/${prepared.versionId}`} target="_blank" rel="noreferrer">檢視原履歷</a></div><Textarea id="tailored-resume" value={draftContent} onChange={(event) => setDraftContent(event.target.value)} rows={13} className="resize-y font-mono text-xs leading-5" /></div>
             <p className="rounded-lg bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">送出前請逐項核對公司、日期、成果數字與技能。JobSmart 不會替你按下 LinkedIn 最後的送出按鈕。</p>
           </div>}

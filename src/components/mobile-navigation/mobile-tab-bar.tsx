@@ -5,6 +5,7 @@ import { useMobileNavigation } from "@/contexts/mobile-navigation-context";
 import { NAVIGATION_PAGES } from "@/lib/navigation-config";
 import { SwipeIndicator } from "./swipe-indicator";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/contexts/i18n-context";
 
 const SWIPE_THRESHOLD = 50;
 const VELOCITY_THRESHOLD = 500;
@@ -20,6 +21,7 @@ export function MobileTabBar() {
 
   const dragX = useMotionValue(0);
   const controls = useAnimation();
+  const { t } = useI18n();
 
   const handleDragEnd = async (
     _event: MouseEvent | TouchEvent | PointerEvent,
@@ -74,7 +76,7 @@ export function MobileTabBar() {
               >
                 <Icon className="h-5 w-5" />
               </motion.div>
-              <span className="text-[10px] font-medium">{page.label}</span>
+              <span className="text-[10px] font-medium">{t(page.mobileLabelKey)}</span>
             </motion.button>
           );
         })}

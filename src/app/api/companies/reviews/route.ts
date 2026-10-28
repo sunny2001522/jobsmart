@@ -16,7 +16,7 @@ const reviewsSchema = z.object({
   companyName: z.string().min(1, "請提供公司名稱"),
   contentType: z.enum(["reviews", "interviews"]).optional().default("reviews"),
   sources: z
-    .array(z.enum(["dcard", "qollie", "ptt", "medium"]))
+    .array(z.enum(["dcard", "qollie", "ptt", "medium", "glassdoor", "indeed", "comparably"]))
     .optional()
     .default(["dcard", "qollie", "ptt"]),
   forceRefresh: z.boolean().optional().default(false),

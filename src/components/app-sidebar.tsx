@@ -3,16 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   Kanban,
   FileText,
   Mic,
-  Linkedin,
   Heart,
   Settings,
   LogOut,
   Orbit,
 } from "lucide-react";
+import { useI18n } from "@/contexts/i18n-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import {
   Sidebar,
   SidebarContent,
@@ -35,47 +35,37 @@ import {
 
 const mainNavItems = [
   {
-    title: "Copilot 工作台",
-    href: "/copilot",
-    icon: Orbit,
-  },
-  {
-    title: "總覽",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "求職追蹤",
+    labelKey: "nav.applications",
     href: "/applications",
     icon: Kanban,
   },
   {
-    title: "履歷管理",
+    labelKey: "nav.resume",
     href: "/resume",
     icon: FileText,
   },
-];
+] as const;
 
 const toolNavItems = [
   {
-    title: "面試準備",
+    labelKey: "nav.interview",
     href: "/interview",
     icon: Mic,
   },
   {
-    title: "LinkedIn 生成",
-    href: "/linkedin",
-    icon: Linkedin,
-  },
-  {
-    title: "價值觀探索",
+    labelKey: "nav.values",
     href: "/values",
     icon: Heart,
   },
-];
+] as const;
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { t } = useI18n();
+  const handleSignOut = async () => {
+    await fetch("/api/auth/local/logout", { method: "POST" });
+    window.location.href = "/login";
+  };
 
   return (
     <Sidebar>
@@ -90,7 +80,7 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>主要功能</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("nav.mainGroup")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNavItems.map((item) => (
@@ -101,7 +91,7 @@ export function AppSidebar() {
                   >
                     <Link href={item.href}>
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{t(item.labelKey)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -111,7 +101,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>工具</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("nav.toolsGroup")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {toolNavItems.map((item) => (
@@ -122,7 +112,7 @@ export function AppSidebar() {
                   >
                     <Link href={item.href}>
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{t(item.labelKey)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -133,6 +123,9 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t p-4">
+        <div className="mb-3 px-2">
+          <LanguageSwitcher className="h-9 w-full" />
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex w-full items-center gap-3 rounded-lg p-2 hover:bg-accent transition-colors">
@@ -141,8 +134,8 @@ export function AppSidebar() {
                 <AvatarFallback>U</AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left">
-                <p className="text-sm font-medium">用戶</p>
-                <p className="text-xs text-muted-foreground">免費方案</p>
+                <p className="text-sm font-medium">{t("nav.user")}</p>
+                <p className="text-xs text-muted-foreground">{t("nav.freePlan")}</p>
               </div>
             </button>
           </DropdownMenuTrigger>
@@ -150,18 +143,18 @@ export function AppSidebar() {
             <DropdownMenuItem asChild>
               <Link href="/settings" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
-                設定
+                {t("nav.settings")}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/settings/linkedin" className="flex items-center gap-2">
                 <Orbit className="h-4 w-4" />
-                LinkedIn 自動同步
+                {t("nav.linkedinSync")}
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem className="text-destructive" onSelect={handleSignOut}>
               <LogOut className="h-4 w-4 mr-2" />
-              登出
+              {t("nav.logout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

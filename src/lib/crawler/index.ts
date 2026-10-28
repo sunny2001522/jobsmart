@@ -1,11 +1,11 @@
 import { searchDcardPosts, type DcardPost } from "./dcard";
 import { searchQollie, qollieToReview } from "./qollie";
 import { searchPTTWithContent, pttToReview } from "./ptt";
-import { searchMediumArticles, mediumToReview } from "./google-search";
+import { searchGoogle, searchMediumArticles, mediumToReview } from "./google-search";
 import { aiGateway } from "../ai/gateway";
 import { CrawlerError, type CrawlerErrorCode } from "./proxy-fetch";
 
-export type ReviewSource = "dcard" | "medium" | "qollie" | "ptt";
+export type ReviewSource = "dcard" | "medium" | "qollie" | "ptt" | "glassdoor" | "indeed" | "comparably";
 
 export interface CompanyReview {
   id: string;
@@ -56,6 +56,9 @@ export async function crawlCompanyReviews(
     qollie: { success: false, count: 0 },
     ptt: { success: false, count: 0 },
     medium: { success: false, count: 0 },
+    glassdoor: { success: false, count: 0 },
+    indeed: { success: false, count: 0 },
+    comparably: { success: false, count: 0 },
   };
 
   // 並行爬取所有來源
@@ -142,6 +145,39 @@ export async function crawlCompanyReviews(
         }
       })()
     );
+  }
+
+  // US-focused review sites. These use indexed public snippets rather than
+  // scraping private pages, and keep the source URL visible for verification.
+  for (const siteSource of [
+    ["glassdoor", "glassdoor.com"],
+    ["indeed", "indeed.com/cmp"],
+    ["comparably", "comparably.com"],
+  ] as const) {
+    const [source, site] = siteSource;
+    if (!sources.includes(source)) continue;
+    crawlPromises.push((async () => {
+      try {
+        const results = await searchGoogle(`"${companyName}" employee reviews`, { site, limit });
+        const reviews = results.map((result, index) => ({
+          id: `${source}-${index}-${Date.now()}`,
+          source,
+          sourceUrl: result.link,
+          title: result.title,
+          content: result.snippet,
+          excerpt: result.snippet,
+          sentiment: null,
+          sentimentScore: null,
+          author: "Public search result",
+          publishedAt: new Date().toISOString(),
+          scrapedAt: new Date().toISOString(),
+        } satisfies CompanyReview));
+        allReviews.push(...reviews);
+        sourceResults[source] = { success: true, count: reviews.length };
+      } catch (error) {
+        sourceResults[source] = { success: false, count: 0, error: extractErrorInfo(error) };
+      }
+    })());
   }
 
   // 等待所有爬取完成

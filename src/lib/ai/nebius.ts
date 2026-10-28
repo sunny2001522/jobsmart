@@ -9,6 +9,7 @@ export type CopilotAction = "scout" | "tailor" | "coach" | "plan";
 
 export interface CopilotInput {
   action: CopilotAction;
+  locale?: "zh-TW" | "en";
   profile?: string;
   job?: string;
   transcript?: string;
@@ -25,7 +26,7 @@ export interface CopilotResult {
 const MODEL = process.env.NEBIUS_MODEL ?? "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16";
 const BASE_URL = process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1";
 
-function demoResult(action: CopilotAction): CopilotResult {
+function demoResult(action: CopilotAction, locale: "zh-TW" | "en"): CopilotResult {
   const results: Record<CopilotAction, CopilotResult> = {
     scout: {
       provider: "demo-fallback",
@@ -56,16 +57,51 @@ function demoResult(action: CopilotAction): CopilotResult {
       evidence: ["依照職缺新鮮度排序", "優先處理回覆機率較高的職缺", "每一步都保留使用者確認權"],
     },
   };
-  return results[action];
+  if (locale === "zh-TW") return results[action];
+
+  const englishResults: Record<CopilotAction, CopilotResult> = {
+    scout: {
+      provider: "demo-fallback",
+      model: "Nemotron-ready demo",
+      summary: "Found 12 roles worth exploring. Start with these 3 high-match openings that are still actively hiring.",
+      nextSteps: ["Review the AI Platform Engineer role (94% match)", "Check recent company, product, and team updates", "Create a tailored resume for each role"],
+      evidence: ["Skill overlap: TypeScript · Next.js · AI agents", "Preference match: hybrid work · growth-stage teams", "Risk note: 2 roles do not list a salary"],
+    },
+    tailor: {
+      provider: "demo-fallback",
+      model: "Nemotron-ready demo",
+      summary: "Created a resume draft for the target role. It keeps your experience truthful and only adjusts order, wording, and verifiable results.",
+      nextSteps: ["Add 2 measurable achievements", "Check that keywords fit the job description", "Review ATS risks before submitting"],
+      evidence: ["JD keyword coverage: 86%", "Added 4 results-focused action verbs", "No experience invented: each suggestion has a source"],
+    },
+    coach: {
+      provider: "demo-fallback",
+      model: "Nemotron-ready demo",
+      summary: "Your answer clearly describes your actions. Next time, lead with the result and use numbers to show impact.",
+      nextSteps: ["Record a 60-second version using the STAR format", "Share the result in the first 15 seconds", "Prepare an example of how you learned from a setback"],
+      evidence: ["Content relevance: 88", "Structure clarity: 74", "Areas to improve: quantified results and pacing"],
+    },
+    plan: {
+      provider: "demo-fallback",
+      model: "Nemotron-ready demo",
+      summary: "Planned the 3 most valuable tasks for today so you can complete one strong application in 45 minutes.",
+      nextSteps: ["09:00 Research the role and confirm its requirements", "09:15 Create tailored resume and cover letter drafts", "09:35 Record one mock interview answer and review it"],
+      evidence: ["Prioritized by job freshness", "Focused on roles with a higher chance of response", "You stay in control and approve every step"],
+    },
+  };
+
+  return englishResults[action];
 }
 
 export async function runNebiusCopilot(input: CopilotInput): Promise<CopilotResult> {
   const key = process.env.NEBIUS_API_KEY;
-  if (!key) return demoResult(input.action);
+  const locale = input.locale ?? "zh-TW";
+  if (!key) return demoResult(input.action, locale);
 
   const prompt = [
     "You are JobSmart Copilot, a careful career agent.",
     "Never invent experience, employers, metrics, or job listings. Return concise JSON with summary, nextSteps, evidence.",
+    locale === "en" ? "Respond in English." : "Respond in Traditional Chinese (Taiwan).",
     `Action: ${input.action}`,
     input.profile ? `Profile: ${input.profile}` : "",
     input.job ? `Job: ${input.job}` : "",

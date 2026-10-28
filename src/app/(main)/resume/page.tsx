@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +26,10 @@ export default function ResumePage() {
   const { selectedCategoryId } = useJobCategoryContext();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [deleteVersionId, setDeleteVersionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") === "1") setIsAddDialogOpen(true);
+  }, []);
 
   // 根據選中類別過濾履歷版本
   const filteredVersions = useMemo(() => {

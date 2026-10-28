@@ -30,12 +30,14 @@ import type {
   InterviewAggregated,
   InterviewStage,
 } from "@/types";
+import { useI18n } from "@/contexts/i18n-context";
 
 const ALL_SOURCES: InterviewSource[] = ["dcard", "ptt", "qollie", "medium"];
 
 interface InterviewSectionProps {
   companyName: string;
   position: string;
+  resumeText?: string;
   interviews?: InterviewExperience[];
   aggregated?: InterviewAggregated;
   isLoading?: boolean;
@@ -48,6 +50,7 @@ interface InterviewSectionProps {
 export function InterviewSection({
   companyName,
   position,
+  resumeText = "",
   interviews = [],
   aggregated,
   isLoading,
@@ -56,6 +59,8 @@ export function InterviewSection({
   lastSearchedAt,
   onSearchInterviews,
 }: InterviewSectionProps) {
+  const { locale } = useI18n();
+  const isEnglish = locale === "en";
   const [activeSource, setActiveSource] = useState<"all" | InterviewSource>("all");
   const [showAllQuestions, setShowAllQuestions] = useState(false);
 
@@ -64,6 +69,11 @@ export function InterviewSection({
     activeSource === "all"
       ? interviews
       : interviews.filter((i) => i.source === activeSource);
+  const resumeQuestions = [
+    `請具體說明你在履歷中與「${position}」最相關的一項成果。`,
+    "履歷提到的經驗中，哪一項最能證明你能解決這個職位的核心問題？",
+    resumeText ? "請深入說明履歷中一段經歷的背景、你的行動，以及最後的量化結果。" : "請準備一個能展現你能力的實際案例，並用 STAR 結構回答。",
+  ];
 
   // 計算每個來源的數量
   const sourceCounts = interviews.reduce(
@@ -247,6 +257,23 @@ export function InterviewSection({
           <p className="text-xs">點擊「搜尋面試經驗」按鈕開始搜尋</p>
         </div>
       )}
+
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div>
+            <h4 className="text-sm font-medium">{isEnglish ? "Prepare questions from the company and your resume" : "根據公司與你的履歷準備問題"}</h4>
+            <p className="mt-1 text-xs text-muted-foreground">{isEnglish ? "Company interview questions and resume follow-ups are collected in Interview Prep." : "公司面試經驗與履歷追問會一起整理到 Interview Prep。"}</p>
+          </div>
+          <ul className="space-y-2">
+            {resumeQuestions.map((question, index) => (
+              <li key={question} className="flex gap-2 text-sm">
+                <span className="text-muted-foreground">{index + 1}.</span>
+                <span>{question}</span>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
 
       {/* 彙整資訊 */}
       {aggregated && interviews.length > 0 && (

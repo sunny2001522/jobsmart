@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { I18nProvider } from "@/contexts/i18n-context";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JobSmart - 智慧求職助手",
-  description: "AI 驅動的求職輔助工具，幫助你打造完美履歷、追蹤求職進度、準備面試",
-  keywords: ["求職", "履歷", "面試", "AI", "求職追蹤"],
+  title: "JobSmart - Smart Job Search Assistant",
+  description: "AI-powered tools to tailor resumes, track applications, and prepare for interviews.",
+  keywords: ["job search", "resume", "interview", "AI", "application tracker"],
 };
 
 export default function RootLayout({
@@ -25,12 +26,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-TW" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
-        {children}
-        <Toaster position="top-right" />
+        <I18nProvider>
+          {children}
+          <Toaster position="top-right" />
+        </I18nProvider>
       </body>
     </html>
   );

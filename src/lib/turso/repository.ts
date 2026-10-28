@@ -1,13 +1,11 @@
 // Dynamic JSON records are decoded into the existing domain types at this boundary.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment -- Persisted JSON is decoded at this adapter boundary.
 // @ts-nocheck
 import { ensureTursoSchema, getTursoClient } from "./server";
 import type { InValue } from "@libsql/client";
 import type {
-  ApplicationStatus, CategoryStats, CompanyReview, InterviewAnswer, InterviewAnswerInsert,
-  InterviewQuestion, InterviewQuestionInsert, JobApplication, JobApplicationInsert,
-  JobApplicationUpdate, JobCategory, JobCategoryInsert, JobCategoryUpdate, Profile, ProfileUpdate,
-  Resume, ResumeInsert, ResumeUpdate, ResumeVersion, ResumeVersionInsert, ResumeVersionUpdate,
-  ValueRanking, ValueRankingInsert, VersionJobResume, VersionJobResumeUpdate, ResumeVersionWithJobs,
+  CategoryStats, CompanyReview, InterviewAnswer, InterviewQuestion, JobApplication,
+  JobCategory, Profile, Resume, ResumeVersion, ValueRanking, VersionJobResume, ResumeVersionWithJobs,
 } from "@/lib/turso/types";
 import type { InterviewExperience } from "@/types";
 
@@ -110,12 +108,39 @@ export async function dispatch(action: string, args: unknown[] = []): Promise<un
     case "updateResumeVersion": return await patch("resume_versions", String(args[0]), args[1] as AnyRecord) as ResumeVersion | null;
     case "deleteResumeVersion": return Boolean(await patch("resume_versions", String(args[0]), { is_active: false }));
     case "addJobToVersion": return await save("version_job_resumes", { version_id: args[0], job_application_id: args[1], generation_status: "pending", user_id: uid }) as VersionJobResume;
-    case "removeJobFromVersion": { const rows = await list("version_job_resumes", { version_id: String(args[0]), job_application_id: String(args[1]) }); if (rows[0]) return remove("version_job_resumes", String(rows[0].id)); return true; }
-    case "getVersionJobResume": { const rows = await list("version_job_resumes", { version_id: String(args[0]), job_application_id: String(args[1]) }); return rows[0] as VersionJobResume | undefined ?? null; }
+    case "removeJobFromVersion": { const rows = (await list("version_job_resumes", { user_id: uid })).filter((row) => row.version_id === String(args[0]) && row.job_application_id === String(args[1])); if (rows[0]) return remove("version_job_resumes", String(rows[0].id)); return true; }
+    case "getVersionJobResume": { const rows = (await list("version_job_resumes", { user_id: uid })).filter((row) => row.version_id === String(args[0]) && row.job_application_id === String(args[1])); return rows[0] as VersionJobResume | undefined ?? null; }
     case "updateVersionJobResume": return await patch("version_job_resumes", String(args[0]), args[1] as AnyRecord) as VersionJobResume | null;
-    case "getVersionJobResumes": return await list("version_job_resumes", { version_id: String(args[0]) }) as VersionJobResume[];
-    case "getCustomizedResumesForJob": return await list("version_job_resumes", { job_application_id: String(args[0]) }) as VersionJobResume[];
-    case "getResumeVersionWithJobs": { const version = await one("resume_versions", String(args[0])); if (!version) return null; const jobs = await list("version_job_resumes", { version_id: String(args[0]) }); return { ...version, version_job_resumes: jobs, job_count: jobs.length, completed_count: jobs.filter((j) => j.generation_status === "completed").length } as ResumeVersionWithJobs; }
+    case "getVersionJobResumes": {
+      const [relations, applications] = await Promise.all([
+        list("version_job_resumes", { user_id: uid }),
+        list("job_applications", { user_id: uid }),
+      ]);
+      const applicationsById = new Map(applications.map((application) => [application.id, application]));
+      return relations
+        .filter((row) => row.version_id === String(args[0]))
+        .flatMap((row) => {
+          const job = applicationsById.get(String(row.job_application_id));
+          return job ? [{ ...row, job_application: job }] : [];
+        }) as (VersionJobResume & { job_application: JobApplication })[];
+    }
+    case "getCustomizedResumesForJob": return (await list("version_job_resumes", { user_id: uid })).filter((row) => row.job_application_id === String(args[0])) as VersionJobResume[];
+    case "getResumeVersionWithJobs": {
+      const version = await one("resume_versions", String(args[0]));
+      if (!version) return null;
+      const [relations, applications] = await Promise.all([
+        list("version_job_resumes", { user_id: uid }),
+        list("job_applications", { user_id: uid }),
+      ]);
+      const applicationsById = new Map(applications.map((application) => [application.id, application]));
+      const jobs = relations
+        .filter((row) => row.version_id === String(args[0]))
+        .flatMap((row) => {
+          const job = applicationsById.get(String(row.job_application_id));
+          return job ? [{ ...row, job_application: job }] : [];
+        });
+      return { ...version, version_job_resumes: jobs, job_count: jobs.length, completed_count: jobs.filter((job) => job.generation_status === "completed").length } as ResumeVersionWithJobs;
+    }
     case "getJobCategories": return await list("job_categories", { user_id: uid }, "display_order ASC, created_at ASC") as JobCategory[];
     case "getJobCategory": return await one("job_categories", String(args[0])) as JobCategory | null;
     case "createJobCategory": return await save("job_categories", { ...(args[0] as AnyRecord), user_id: uid }) as JobCategory;
@@ -124,6 +149,7 @@ export async function dispatch(action: string, args: unknown[] = []): Promise<un
     case "reorderJobCategories": { for (const item of args[0] as AnyRecord[]) await patch("job_categories", String(item.id), { display_order: item.display_order }); return true; }
     case "getCategoryStats": { const rows = await list("job_applications", { user_id: uid }); const counts = new Map<string, number>(); rows.forEach((r) => r.category_id && counts.set(String(r.category_id), (counts.get(String(r.category_id)) ?? 0) + 1)); return (await list("job_categories", { user_id: uid })).map((c) => ({ ...c, application_count: counts.get(String(c.id)) ?? 0 })) as CategoryStats[]; }
     case "getCompanyReviewsByName": { const term = String(args[0] ?? "").toLowerCase(); return (await list("company_reviews", {})).filter((r) => String(r.company_name ?? "").toLowerCase().includes(term)) as CompanyReview[]; }
+    case "createCompanyReview": return await save("company_reviews", { ...(args[0] as AnyRecord), user_id: uid }) as CompanyReview;
     case "getInterviewExperiencesByCompany": { const term = String(args[0] ?? "").toLowerCase(); return (await list("interview_experiences", {})).filter((r) => String(r.company_name ?? "").toLowerCase().includes(term)) as InterviewExperience[]; }
     case "saveInterviewExperiences": { for (const experience of (args[0] as InterviewExperience[])) await save("interview_experiences", experience as unknown as AnyRecord, experience.id); return true; }
     case "getInterviewExperienceStats": { const term = String(args[0] ?? "").toLowerCase(); const rows = (await list("interview_experiences", {})).filter((r) => String(r.company_name ?? "").toLowerCase().includes(term)); const difficulties = rows.map((r) => String(r.difficulty)).filter((d): d is "easy" | "medium" | "hard" => ["easy", "medium", "hard"].includes(d)); const avg = difficulties.length ? difficulties.reduce((sum, d) => sum + (d === "easy" ? 1 : d === "medium" ? 2 : 3), 0) / difficulties.length : 0; return { total: rows.length, offerCount: rows.filter((r) => r.outcome === "offer").length, rejectedCount: rows.filter((r) => r.outcome === "rejected").length, avgDifficulty: avg === 0 ? null : avg < 1.5 ? "easy" : avg < 2.5 ? "medium" : "hard" }; }

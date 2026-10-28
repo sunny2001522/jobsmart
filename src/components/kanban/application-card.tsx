@@ -4,9 +4,10 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GripVertical, ExternalLink, Star } from "lucide-react";
+import { GripVertical, ExternalLink, Star, Heart, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { JobApplication } from "@/types";
+import { useI18n } from "@/contexts/i18n-context";
 
 interface ApplicationCardProps {
   application: JobApplication;
@@ -14,6 +15,7 @@ interface ApplicationCardProps {
   isSelected?: boolean;
   showSummary?: boolean;
   onViewDetail?: () => void;
+  onApprove?: () => void;
   isMobile?: boolean;
 }
 
@@ -23,8 +25,10 @@ export function ApplicationCard({
   isSelected,
   showSummary = true,
   onViewDetail,
+  onApprove,
   isMobile = false,
 }: ApplicationCardProps) {
+  const { locale } = useI18n();
   const {
     attributes,
     listeners,
@@ -47,9 +51,12 @@ export function ApplicationCard({
       : application.jd_content_zh?.keywords_zh?.slice(0, 4) || [];
 
   // 分數來源邏輯
-  const score = application.value_scores?.weightedScore
-    ? Math.round(application.value_scores.weightedScore)
-    : 5;
+  const rawValueScore = application.value_scores?.weightedScore;
+  const valueScore = rawValueScore == null
+    ? null
+    : Math.round(rawValueScore <= 10 ? rawValueScore * 10 : rawValueScore);
+  const companyScore = application.rating_happiness;
+  const scoreTone = companyScore == null ? "text-muted-foreground" : companyScore >= 7 ? "text-emerald-600" : companyScore >= 5 ? "text-amber-600" : "text-red-600";
 
   const legacyLinkedInTitle = application.position.match(/^(.+?)\s+at\s+(.+?)(?:\s+[—|-].*)?$/i);
   const displayPosition = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name)
@@ -57,7 +64,7 @@ export function ApplicationCard({
     : application.position;
   const displayCompany = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name)
     ? legacyLinkedInTitle[2].trim()
-    : (/linkedin\.com/i.test(application.company_name) ? "LinkedIn 職缺" : application.company_name);
+    : (/linkedin\.com/i.test(application.company_name) ? (locale === "en" ? "LinkedIn job" : "LinkedIn 職缺") : application.company_name);
 
   const handleCardClick = (e: React.MouseEvent) => {
     // 避免在拖曳時觸發
@@ -144,14 +151,27 @@ export function ApplicationCard({
                   </div>
                 )}
 
-                {/* 公司評論分數 */}
-                <div className="flex items-center gap-1">
-                  <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                  <span className="text-xs text-muted-foreground">
-                    {score}/10
+                {/* 星星 = AI 公司評價；愛心 = 個人價值觀匹配 */}
+                <div className="flex items-center gap-3">
+                  <Star className={cn("h-3 w-3 fill-current", scoreTone)} />
+                  <span className={cn("text-xs", scoreTone)}>
+                    {companyScore == null ? "—" : `${companyScore}/10`}
                   </span>
+                  <Heart className="h-3 w-3 fill-rose-400 text-rose-400" />
+                  <span className="text-xs text-muted-foreground">{valueScore == null ? "—" : `${valueScore}/100`}</span>
                 </div>
               </div>
+            )}
+
+            {application.status === "wishlist" && onApprove && (
+              <button
+                type="button"
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                onClick={(event) => { event.stopPropagation(); onApprove(); }}
+              >
+                <Check className="h-3.5 w-3.5" />
+                {locale === "en" ? "Prepare resume" : "OK — 準備履歷"}
+              </button>
             )}
           </div>
         </div>

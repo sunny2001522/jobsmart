@@ -28,7 +28,7 @@ interface ValueMention {
 /**
  * 從公司評論中提取價值觀提及
  */
-function extractValueMentions(reviews: CompanyReview[]): Map<string, ValueMention> {
+function extractValueMentions(reviews: CompanyReview[], jdText = ""): Map<string, ValueMention> {
   const mentions = new Map<string, ValueMention>();
 
   // 初始化所有價值觀
@@ -42,8 +42,11 @@ function extractValueMentions(reviews: CompanyReview[]): Map<string, ValueMentio
     });
   });
 
-  // 遍歷評論提取關鍵詞
-  reviews.forEach((review) => {
+  // 遍歷評論與 JD 提取關鍵詞；JD 本身視為中性證據，不會被當成正面評論。
+  const sources = jdText.trim()
+    ? [...reviews, { content: jdText, title: null, sentiment: "neutral" as const } as CompanyReview]
+    : reviews;
+  sources.forEach((review) => {
     const content = review.content.toLowerCase();
     const sentiment = review.sentiment || "neutral";
 
@@ -88,10 +91,11 @@ function extractValueMentions(reviews: CompanyReview[]): Map<string, ValueMentio
  */
 export function calculateValueMatch(
   userTopValues: string[],
-  reviews: CompanyReview[]
+  reviews: CompanyReview[],
+  jdText = ""
 ): ValueMatchResult {
   // 提取公司在評論中被提及的價值觀
-  const valueMentions = extractValueMentions(reviews);
+  const valueMentions = extractValueMentions(reviews, jdText);
 
   // 計算每個用戶價值觀的匹配分數
   const breakdown: ScoreBreakdown[] = [];

@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     }
     const linkedInContext = await getLatestLinkedInContext();
     const profile = body.profile ?? linkedInContext?.text;
-    const result = await runNebiusCopilot({ action, profile, job: body.job, transcript: body.transcript });
+    const result = await runNebiusCopilot({ action, locale: body.locale === "en" ? "en" : "zh-TW", profile, job: body.job, transcript: body.transcript });
     await recordAgentRun({ action, provider: result.provider, model: result.model, request: body, response: result });
     return NextResponse.json({ success: true, data: result });
   } catch (error) {

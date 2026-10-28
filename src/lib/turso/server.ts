@@ -1,4 +1,4 @@
-import { createClient, type Client, type InValue } from "@libsql/client";
+import { createClient, type Client } from "@libsql/client";
 
 let client: Client | null = null;
 

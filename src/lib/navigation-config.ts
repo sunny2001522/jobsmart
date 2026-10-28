@@ -1,26 +1,23 @@
 import {
-  LayoutDashboard,
   Kanban,
   FileText,
   Mic,
-  Linkedin,
   Heart,
   type LucideIcon,
 } from "lucide-react";
 
 export interface NavigationPage {
   path: string;
-  label: string;
+  labelKey: "nav.dashboard" | "nav.applications" | "nav.resume" | "nav.interview" | "nav.values";
+  mobileLabelKey: "nav.dashboard" | "nav.mobileApplications" | "nav.mobileResume" | "nav.mobileInterview" | "nav.mobileValues";
   icon: LucideIcon;
 }
 
 export const NAVIGATION_PAGES: NavigationPage[] = [
-  { path: "/dashboard", label: "總覽", icon: LayoutDashboard },
-  { path: "/applications", label: "追蹤", icon: Kanban },
-  { path: "/resume", label: "履歷", icon: FileText },
-  { path: "/interview", label: "面試", icon: Mic },
-  { path: "/linkedin", label: "LinkedIn", icon: Linkedin },
-  { path: "/values", label: "價值觀", icon: Heart },
+  { path: "/applications", labelKey: "nav.applications", mobileLabelKey: "nav.mobileApplications", icon: Kanban },
+  { path: "/resume", labelKey: "nav.resume", mobileLabelKey: "nav.mobileResume", icon: FileText },
+  { path: "/interview", labelKey: "nav.interview", mobileLabelKey: "nav.mobileInterview", icon: Mic },
+  { path: "/values", labelKey: "nav.values", mobileLabelKey: "nav.mobileValues", icon: Heart },
 ];
 
 export type NavigationPath = (typeof NAVIGATION_PAGES)[number]["path"];

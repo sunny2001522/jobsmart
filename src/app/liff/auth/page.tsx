@@ -101,28 +101,7 @@ export default function LiffAuthPage() {
     }
   }
 
-  async function handleGoogleLogin() {
-    setState("logging_in");
 
-    const tursoClient = createClient();
-
-    const { error } = await tursoClient.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/liff/auth/callback`,
-        queryParams: {
-          line_user_id: lineProfile?.userId || "",
-          line_display_name: lineProfile?.displayName || "",
-          line_picture_url: lineProfile?.pictureUrl || "",
-        },
-      },
-    });
-
-    if (error) {
-      setError("Google 登入失敗");
-      setState("error");
-    }
-  }
 
   async function bindAccount() {
     if (!lineProfile) {
@@ -243,16 +222,8 @@ export default function LiffAuthPage() {
                 </div>
               </div>
 
-              <Button
-                onClick={handleGoogleLogin}
-                className="w-full"
-                size="lg"
-              >
-                使用 Google 登入 JobSmart
-              </Button>
-
-              <p className="text-xs text-center text-muted-foreground">
-                登入後將自動連結你的 LINE 和 JobSmart 帳號
+              <p className="text-sm text-center text-muted-foreground">
+                Account linking is temporarily unavailable. Please try again later.
               </p>
             </div>
           )}
