@@ -47,13 +47,28 @@ function getGeminiClient() {
   return new GoogleGenerativeAI(apiKey);
 }
 
-// 初始化 OpenAI
-function getOpenAIClient() {
+// 初始化 OpenAI 相容端點：優先使用 OpenAI，未設定時改用 Nebius Token Factory
+function getOpenAIClient(): { client: OpenAI; provider: "openai" | "nebius" } {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not set");
+  if (apiKey) return { client: new OpenAI({ apiKey }), provider: "openai" };
+  const nebiusKey = process.env.NEBIUS_API_KEY;
+  if (nebiusKey) {
+    return {
+      client: new OpenAI({ apiKey: nebiusKey, baseURL: process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1" }),
+      provider: "nebius",
+    };
   }
-  return new OpenAI({ apiKey });
+  throw new Error("尚未設定 AI 金鑰：請在環境變數設定 OPENAI_API_KEY 或 NEBIUS_API_KEY");
+}
+
+// 從模型輸出取出 JSON：容忍 ```json 區塊、<think> 推理段落與前後說明文字
+export function parseJsonResponse<T = Record<string, unknown>>(text: string): T {
+  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```(?:json)?/gi, "").trim();
+  try { return JSON.parse(cleaned) as T; } catch { /* fall through */ }
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end <= start) throw new Error("AI 回傳內容不是 JSON");
+  return JSON.parse(cleaned.slice(start, end + 1)) as T;
 }
 
 // AI Gateway 主函數
@@ -64,6 +79,7 @@ export async function aiGateway(
     systemPrompt?: string;
     temperature?: number;
     maxTokens?: number;
+    json?: boolean;
   }
 ): Promise<{ text: string; model: string; usage?: { input: number; output: number } }> {
   const model = TASK_MODEL_MAPPING[taskType];
@@ -121,9 +137,13 @@ async function callOpenAI(
     systemPrompt?: string;
     temperature?: number;
     maxTokens?: number;
+    json?: boolean;
   }
 ): Promise<{ text: string; model: string; usage?: { input: number; output: number } }> {
-  const openai = getOpenAIClient();
+  const { client: openai, provider } = getOpenAIClient();
+  const resolvedModel = provider === "nebius"
+    ? process.env.NEBIUS_MODEL ?? "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"
+    : model;
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
@@ -134,17 +154,23 @@ async function callOpenAI(
   messages.push({ role: "user", content: prompt });
 
   const response = await openai.chat.completions.create({
-    model,
+    model: resolvedModel,
     messages,
     temperature: options?.temperature ?? 0.7,
     max_tokens: options?.maxTokens ?? 2048,
+    // JSON mode 只在 OpenAI 上啟用；其他相容端點不一定支援
+    ...(options?.json && provider === "openai" ? { response_format: { type: "json_object" as const } } : {}),
   });
 
-  const text = response.choices[0]?.message?.content ?? "";
+  const choice = response.choices[0];
+  const text = choice?.message?.content ?? "";
+  if (choice?.finish_reason === "length") {
+    console.warn(`[aiGateway] ${resolvedModel} output truncated at max_tokens`);
+  }
 
   return {
     text,
-    model,
+    model: resolvedModel,
     usage: {
       input: response.usage?.prompt_tokens ?? 0,
       output: response.usage?.completion_tokens ?? 0,
@@ -342,25 +368,34 @@ ${additionalContext ? `\n## 使用者補充的真實經驗（只能在內容有�
 - 只返回 JSON，不要包含任何其他文字`,
     temperature: 0.6,
     maxTokens: 4096,
+    json: true,
   });
 
+  let parsed: Record<string, unknown>;
   try {
-    const parsed = JSON.parse(result.text);
-    const content = String(parsed.customizedContent || "");
-    if (content.trim().length < Math.min(80, baseResume.trim().length * 0.4)) throw new Error("客製履歷輸出不完整");
-    const requirements = Array.isArray(parsed.requirements) ? parsed.requirements : [];
-    const audit = await reviewResumeClaims(baseResume, content, jobDescription, requirements);
-    return {
-      customizedContent: content,
-      atsScore: Math.max(0, Math.min(100, Number(parsed.atsScore) || 0)),
-      matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [],
-      missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords : [],
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-      audit: { ...audit, requirements },
-    };
-  } catch {
-    throw new Error("履歷客製或事實審核失敗，請稍後重試");
+    parsed = parseJsonResponse(result.text);
+  } catch (error) {
+    console.error("[customizeResume] invalid JSON from model", error, result.text.slice(0, 500));
+    throw new Error("AI 回傳的履歷格式無法解析（可能是履歷太長被截斷），請稍後重試");
   }
+  const content = String(parsed.customizedContent || "");
+  if (content.trim().length < Math.min(80, baseResume.trim().length * 0.4)) throw new Error("客製履歷輸出不完整，請稍後重試");
+  const requirements = (Array.isArray(parsed.requirements) ? parsed.requirements : []) as ResumeAudit["requirements"];
+  let audit: ResumeAudit;
+  try {
+    audit = await reviewResumeClaims(baseResume, content, jobDescription, requirements);
+  } catch (error) {
+    console.error("[customizeResume] fact review failed", error);
+    throw new Error("履歷事實審核失敗，請稍後重試");
+  }
+  return {
+    customizedContent: content,
+    atsScore: Math.max(0, Math.min(100, Number(parsed.atsScore) || 0)),
+    matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords as string[] : [],
+    missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords as string[] : [],
+    suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions as string[] : [],
+    audit: { ...audit, requirements },
+  };
 }
 
 export type ResumeAudit = {
@@ -373,9 +408,9 @@ export type ResumeAudit = {
 export async function reviewResumeClaims(baseResume: string, draft: string, jobDescription: string, requirements: ResumeAudit["requirements"] = []): Promise<ResumeAudit> {
   const result = await aiGateway("resume_customization", `基礎履歷：\n${baseResume}\n\n客製草稿：\n${draft}\n\nJD：\n${jobDescription}\n\n條件分析：${JSON.stringify(requirements)}`, {
     systemPrompt: `你是獨立履歷事實審核員，與改寫者分開審核。逐項檢查草稿中的具體事實與責任強度是否能由基礎履歷支持。只將清楚可對照的原文放入 evidence；不能支持的數字、成果、技能、責任或資格標為 unsupported；原文被升級為更大責任或成果標為 exaggerated。通用自我描述不必列。status 有任何 exaggerated/unsupported 即 needs_attention。回傳純 JSON：{"status":"passed|needs_attention","summary":"...","findings":[{"claim":"草稿原句","status":"supported|exaggerated|unsupported","evidence":"基礎履歷原文或空字串","reason":"原因"}],"requirements":[{"requirement":"...","priority":"required|preferred","evidence":"...","status":"supported|partial|missing"}]}`,
-    temperature: 0.1, maxTokens: 3000,
+    temperature: 0.1, maxTokens: 3000, json: true,
   });
-  const parsed = JSON.parse(result.text) as ResumeAudit;
+  const parsed = parseJsonResponse<ResumeAudit>(result.text);
   if (!Array.isArray(parsed.findings) || !["passed", "needs_attention"].includes(parsed.status)) throw new Error("事實審核格式無效");
   return { ...parsed, requirements: Array.isArray(parsed.requirements) ? parsed.requirements : requirements };
 }
