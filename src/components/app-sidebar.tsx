@@ -78,7 +78,7 @@ export function AppSidebar() {
         </Link>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent data-tour="nav">
         <SidebarGroup>
           <SidebarGroupLabel>{t("nav.mainGroup")}</SidebarGroupLabel>
           <SidebarGroupContent>

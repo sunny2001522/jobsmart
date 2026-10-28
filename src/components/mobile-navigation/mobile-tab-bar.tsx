@@ -52,7 +52,7 @@ export function MobileTabBar() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-t safe-area-bottom">
       {/* Tab 圖標列 */}
-      <nav className="flex justify-around items-center px-2 pt-2">
+      <nav data-tour="nav" className="flex justify-around items-center px-2 pt-2">
         {NAVIGATION_PAGES.map((page, index) => {
           const Icon = page.icon;
           const isActive = index === currentIndex;
