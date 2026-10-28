@@ -27,6 +27,8 @@ export async function GET() {
       value_scores: null, category_id: null,
     }]) as Record<string, unknown> | null;
     if (application?.id) {
+      // 同一批次可能有相同網址的候選職缺，加入清單避免重複建立卡片
+      if (!existing) applications.push(application);
       await db.execute({ sql: "UPDATE job_leads SET application_id = ?, updated_at = ? WHERE id = ? AND user_id = ?", args: [String(application.id), new Date().toISOString(), String(lead.id), "demo-user"] });
     }
   }

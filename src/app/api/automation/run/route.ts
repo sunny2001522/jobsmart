@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureTursoSchema, getTursoClient } from "@/lib/turso/server";
 import { searchGoogle } from "@/lib/crawler/google-search";
+import { dispatch } from "@/lib/turso/repository";
 
 const demoJobs = [
   { company: "Nebius", role: "AI Product Manager", url: "https://careers.nebius.com/", source: "demo", snippet: "Build AI products on open infrastructure." },
@@ -36,7 +37,13 @@ export async function POST() {
   const results = await searchGoogle(query, { site: "linkedin.com/jobs", limit: 5 });
   const jobs = results.length ? results.map(normalizeSearchResult) : demoJobs;
   const now = new Date().toISOString(); const runId = crypto.randomUUID(); let promoted = 0;
+  // 已經找過或已在看板上的職缺不重複加入
+  const knownLeads = await db.execute({ sql: "SELECT url FROM job_leads WHERE user_id = ? AND url IS NOT NULL", args: ["demo-user"] });
+  const knownApplications = await dispatch("getJobApplications") as Array<Record<string, unknown>>;
+  const knownUrls = new Set([...knownLeads.rows.map((row) => String(row.url)), ...knownApplications.map((app) => String(app.jd_url || "")).filter(Boolean)]);
   for (const job of jobs) {
+    if (knownUrls.has(job.url)) continue;
+    knownUrls.add(job.url);
     const id = crypto.randomUUID();
     const jdText = await fetchPublicJd(job.url, job.snippet);
     await db.execute({ sql: "INSERT OR IGNORE INTO job_leads (id, user_id, company, role, url, source, snippet, status, mode, cover_letter_status, discovered_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [id, "demo-user", job.company, job.role, job.url, job.source, jdText, "queued", mode, "pending", now, now] });
