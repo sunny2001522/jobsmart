@@ -25,13 +25,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Eye, EyeOff, Sparkles, MoreHorizontal, Trash2, ExternalLink, Save, Search, X, Check, FileText, BriefcaseBusiness, Heart, BookmarkCheck, Send } from "lucide-react";
+import { Plus, Loader2, Eye, EyeOff, Sparkles, MoreHorizontal, Trash2, ExternalLink, Save, Search, X, Check, FileText, BriefcaseBusiness, Heart, BookmarkCheck, Send, CircleHelp } from "lucide-react";
 import { toast } from "sonner";
 import { AddApplicationDialog } from "@/components/kanban/add-application-dialog";
 import { JobCategoryTabs } from "@/components/job-category-tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useJobCategoryContext } from "@/contexts/job-category-context";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useI18n } from "@/contexts/i18n-context";
+import { SpotlightTour, useSpotlightTour, type SpotlightStep } from "@/components/spotlight-tour";
 import {
   getJobApplications,
   createJobApplication,
@@ -58,6 +60,33 @@ const customCollisionDetection: CollisionDetection = (args) => {
   return rectIntersection(args);
 };
 
+const TOUR_STORAGE_KEY = "jobsmart.tour.applications.v1";
+
+const tourContent: Record<"zh-TW" | "en", { steps: SpotlightStep[]; labels: { next: string; prev: string; skip: string; done: string } }> = {
+  "zh-TW": {
+    labels: { next: "下一步", prev: "上一步", skip: "略過", done: "開始使用" },
+    steps: [
+      { target: "progress", title: "找工作進度", body: "這裡列出求職的每個步驟與完成度，點任何一步就能直接前往處理。" },
+      { target: "ai-search", title: "AI 找職缺", body: "依照你設定的職位關鍵字搜尋公開職缺，找到的結果會自動放進「想投遞」欄。" },
+      { target: "add", title: "手動新增追蹤", body: "看到喜歡的職缺？貼上網址或職缺描述，JobSmart 會自動解析並加入看板。" },
+      { target: "kanban", title: "求職看板", body: "拖曳卡片更新進度。在「想投遞」的卡片按「OK — 準備履歷」，AI 會依 JD 產生客製履歷讓你審核。" },
+      { target: "nav", title: "更多工具", body: "在這裡切換履歷管理、面試練習與價值觀排序，先建立一份履歷才能使用 AI 客製功能。" },
+      { target: "tour-replay", title: "隨時重看教學", body: "忘記怎麼用時，按這個按鈕就能再看一次導覽。" },
+    ],
+  },
+  en: {
+    labels: { next: "Next", prev: "Back", skip: "Skip", done: "Get started" },
+    steps: [
+      { target: "progress", title: "Your job search progress", body: "Each step of your search and how far along you are. Click any step to jump straight to it." },
+      { target: "ai-search", title: "AI job search", body: "Searches public listings with your target role. Results land in the Wishlist column automatically." },
+      { target: "add", title: "Track a job manually", body: "Found a job you like? Paste its link or description and JobSmart will parse it onto the board." },
+      { target: "kanban", title: "Application board", body: "Drag cards to update their stage. On a Wishlist card, click “Prepare resume” to get an AI-tailored resume to review." },
+      { target: "nav", title: "More tools", body: "Switch to resumes, interview practice and values ranking here. Create a resume first to use AI tailoring." },
+      { target: "tour-replay", title: "Replay this tour", body: "Click here any time to see this walkthrough again." },
+    ],
+  },
+};
+
 export default function ApplicationsPage() {
   const router = useRouter();
   const [applications, setApplications] = useState<JobApplication[]>([]);
@@ -79,9 +108,13 @@ export default function ApplicationsPage() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [prepared, setPrepared] = useState<{ applicationId: string; relationId: string; versionId: string; versionName: string; customizedContent: string; atsScore: number; matchedKeywords: string[]; missingKeywords: string[]; suggestions: string[]; audit: { status: "passed" | "needs_attention"; summary: string; findings: Array<{ claim: string; status: string; evidence: string; reason: string }>; requirements: Array<{ requirement: string; priority: string; evidence: string; status: string }> } } | null>(null);
   const [draftContent, setDraftContent] = useState("");
+  const [preparingApplicationIds, setPreparingApplicationIds] = useState<Set<string>>(new Set());
 
   const { selectedCategoryId } = useJobCategoryContext();
   const isMobile = useIsMobile();
+  const { locale } = useI18n();
+  const tour = useSpotlightTour(TOUR_STORAGE_KEY);
+  const tourCopy = tourContent[locale === "en" ? "en" : "zh-TW"];
 
   // DnD sensors
   const sensors = useSensors(
@@ -221,7 +254,9 @@ export default function ApplicationsPage() {
       if (!response.ok) throw new Error(result.error || "搜尋失敗");
       await loadAutomation();
       await loadApplications();
-      toast.success(`找到 ${result.data.discovered} 個候選職缺`);
+      const summary = result.data.promoted > 0 ? `找到 ${result.data.discovered} 個職缺，新增 ${result.data.promoted} 個到「想投遞」` : `找到 ${result.data.discovered} 個職缺，都已在看板上`;
+      if (result.data.provider === "demo-provider") toast.warning(`${summary}（未設定搜尋 API，目前為示範資料）`);
+      else toast.success(summary);
     } catch (error) { toast.error(error instanceof Error ? error.message : "搜尋失敗，請稍後重試"); }
     finally { setAutomationRunning(false); }
   };
@@ -291,7 +326,11 @@ export default function ApplicationsPage() {
       router.push("/resume?create=1");
       return;
     }
+    if (preparingApplicationIds.has(application.id)) return;
     const version = resumeVersions.find((item) => item.is_active) || resumeVersions[0];
+    const toastId = `prepare-${application.id}`;
+    setPreparingApplicationIds((previous) => new Set(previous).add(application.id));
+    toast.loading(`正在為「${application.company_name}」客製履歷，約需 30 秒…`, { id: toastId });
     try {
       const response = await fetch("/api/applications/approve", {
         method: "POST",
@@ -299,13 +338,35 @@ export default function ApplicationsPage() {
         body: JSON.stringify({ applicationId: application.id, versionId: version.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "履歷準備失敗");
-      if (result.data.application) {
+      if (result.data?.application) {
         setApplications((previous) => previous.map((item) => item.id === application.id ? result.data.application : item));
       }
-      toast.success(`已使用「${version.name}」建立客製履歷`);
+      if (!response.ok) throw new Error(result.error || "履歷準備失敗");
+      toast.success(`已使用「${version.name}」建立客製履歷，請審核`, { id: toastId });
+      // 直接開啟審核視窗，讓使用者檢查草稿後前往職缺頁送出
+      setActiveLead({ id: application.id, company: application.company_name, role: application.position, url: application.jd_url || "", source: "tracking", status: "prepared", snippet: result.data.jdContent });
+      setJdDraft(result.data.jdContent);
+      setPrepared({
+        applicationId: result.data.applicationId,
+        relationId: result.data.relationId,
+        versionId: result.data.versionId,
+        versionName: result.data.versionName,
+        customizedContent: result.data.customizedContent,
+        atsScore: result.data.atsScore,
+        matchedKeywords: result.data.matchedKeywords,
+        missingKeywords: result.data.missingKeywords,
+        suggestions: result.data.suggestions,
+        audit: result.data.audit,
+      });
+      setDraftContent(result.data.customizedContent);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "履歷準備失敗，請稍後重試");
+      toast.error(error instanceof Error ? error.message : "履歷準備失敗，請稍後重試", { id: toastId });
+    } finally {
+      setPreparingApplicationIds((previous) => {
+        const nextIds = new Set(previous);
+        nextIds.delete(application.id);
+        return nextIds;
+      });
     }
   };
   const handleStatusChange = async (applicationId: string, newStatus: ApplicationStatus) => {
@@ -532,7 +593,7 @@ export default function ApplicationsPage() {
           </div>
           <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
             <JobCategoryTabs className="h-8 shrink-0" showStats stats={categoryStats} totalCount={applications.length} />
-            <Button size="sm" className="px-2 sm:px-3" onClick={runAutomation} disabled={automationRunning} aria-label={automationRunning ? "搜尋中" : "AI 找職缺"} title={automationRunning ? "搜尋中" : "AI 找職缺"}><Sparkles className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">{automationRunning ? "搜尋中" : "AI 找職缺"}</span></Button>
+            <Button data-tour="ai-search" size="sm" className="px-2 sm:px-3" onClick={runAutomation} disabled={automationRunning} aria-label={automationRunning ? "搜尋中" : "AI 找職缺"} title={automationRunning ? "搜尋中" : "AI 找職缺"}><Sparkles className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">{automationRunning ? "搜尋中" : "AI 找職缺"}</span></Button>
             <label className="relative hidden md:block"><span className="sr-only">搜尋公司或職稱</span><Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋公司或職稱" className="h-9 w-64 pl-8 pr-8" />{searchQuery && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="清除搜尋" onClick={() => setSearchQuery("")}><X className="h-3.5 w-3.5" /></button>}</label>
             <Button variant="outline" size="icon" className="md:hidden" aria-label="搜尋公司或職稱" title="搜尋公司或職稱" onClick={() => setShowMobileSearch((value) => !value)}><Search className="h-4 w-4" /></Button>
             <Button
@@ -547,14 +608,17 @@ export default function ApplicationsPage() {
                 <Eye className="h-4 w-4" />
               )}
             </Button>
-            <Button className="px-2 sm:px-4" onClick={() => setIsAddDialogOpen(true)} aria-label="新增追蹤" title="新增追蹤">
+            <Button data-tour="tour-replay" variant="outline" size="icon" onClick={tour.start} aria-label="新手教學" title="新手教學">
+              <CircleHelp className="h-4 w-4" />
+            </Button>
+            <Button data-tour="add" className="px-2 sm:px-4" onClick={() => setIsAddDialogOpen(true)} aria-label="新增追蹤" title="新增追蹤">
               <Plus className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">新增追蹤</span>
             </Button>
           </div>
         </div>
 
-        <section className="overflow-x-auto rounded-lg border bg-card shadow-sm" aria-labelledby="job-search-progress-title">
+        <section data-tour="progress" className="overflow-x-auto rounded-lg border bg-card shadow-sm" aria-labelledby="job-search-progress-title">
           <div className="flex min-w-max items-center gap-1.5 px-2.5 py-1.5">
             <div className="flex items-center gap-1.5 border-r pr-2">
               <h2 id="job-search-progress-title" className="text-xs font-semibold">找工作進度</h2>
@@ -588,13 +652,15 @@ export default function ApplicationsPage() {
 
         {searchQuery && filteredApplications.length === 0 && <div className="rounded-xl border border-dashed px-4 py-8 text-center"><p className="text-sm font-medium">找不到符合「{searchQuery}」的職缺</p><button className="mt-1 text-xs text-primary hover:underline" onClick={() => setSearchQuery("")}>清除搜尋</button></div>}
 
-        <KanbanBoard
-          applications={filteredApplications}
-          showSummaries={showAllSummaries}
-          onApplicationUpdate={handleApplicationUpdate}
-          onAddClick={handleAddClick}
-          onApproveApplication={approveApplication}
-        />
+        <div data-tour="kanban">
+          <KanbanBoard
+            applications={filteredApplications}
+            showSummaries={showAllSummaries}
+            onApplicationUpdate={handleApplicationUpdate}
+            onAddClick={handleAddClick}
+            onApproveApplication={approveApplication}
+          />
+        </div>
 
         <AddApplicationDialog
           open={isAddDialogOpen}
@@ -641,6 +707,8 @@ export default function ApplicationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SpotlightTour steps={tourCopy.steps} labels={tourCopy.labels} open={tour.open} onClose={tour.close} />
 
       <DragOverlay>
         {activeApplication ? (
