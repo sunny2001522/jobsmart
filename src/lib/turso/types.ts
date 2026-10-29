@@ -106,6 +106,8 @@ export interface ValueScore {
   reasoning?: string;
 }
 
+export type ValueVerdict = 'positive' | 'negative' | 'neutral' | 'unknown';
+
 // 職缺的價值觀評分
 export interface JobValueScores {
   status: 'not_calculated' | 'calculating' | 'calculated' | 'failed';
@@ -113,6 +115,7 @@ export interface JobValueScores {
   scores: Record<string, ValueScore>;
   weightedScore: number | null;
   rankingSnapshot: string[] | null;
+  manualVerdicts?: Partial<Record<string, ValueVerdict>>;
 }
 
 // JD 中文翻譯內容

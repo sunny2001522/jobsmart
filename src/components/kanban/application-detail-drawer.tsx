@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 import {
   Sheet,
   SheetContent,
@@ -34,7 +34,8 @@ import {
   updateVersionJobResume,
   createInterviewQuestion,
 } from "@/lib/turso/db";
-import { calculateValueMatch } from "@/lib/values/matcher";
+import { calculateValueMatch, getCompleteValueRanking } from "@/lib/values/matcher";
+import { FACTOR_ORDER } from "@/lib/values/factors-config";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type {
   JobApplication,
@@ -45,6 +46,8 @@ import type {
   InterviewSource,
   InterviewSourceResult,
   InterviewAggregated,
+  JobValueScores,
+  ValueVerdict,
 } from "@/types";
 import type { ResumeVersion, VersionJobResume } from "@/lib/turso/types";
 import { APPLICATION_STATUS_LABELS } from "@/types";
@@ -63,12 +66,77 @@ function extractResumeText(value: unknown): string {
   return "";
 }
 
+function flattenEvidenceText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(flattenEvidenceText).filter(Boolean).join(" ");
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, nestedValue]) => {
+        const nestedText = flattenEvidenceText(nestedValue);
+        return nestedText ? `${key} ${nestedText}` : "";
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+  return "";
+}
+
 function getJobEvidenceText(application: JobApplication): string {
-  return [
-    JSON.stringify(application.jd_content || ""),
-    JSON.stringify(application.jd_content_zh || ""),
-    Array.isArray(application.jd_keywords) ? application.jd_keywords.join(" ") : "",
-  ].join(" ");
+  return flattenEvidenceText({
+    jobDescription: application.jd_content,
+    translatedDescription: application.jd_content_zh,
+    keywords: application.jd_keywords,
+    location: application.work_location,
+    salary: application.salary_min || application.salary_max
+      ? `${application.salary_min ?? ""} ${application.salary_max ?? ""} ${application.salary_currency || ""}`
+      : null,
+    benefits: application.benefits,
+  });
+}
+
+function getRankingValues(ranking: ValueRanking | null): string[] {
+  const savedRanking = ranking?.full_ranking?.length
+    ? ranking.full_ranking
+    : ranking?.top_values || [];
+  return getCompleteValueRanking(savedRanking);
+}
+
+function buildStoredValueScores(result: ValueMatchResult, ranking: string[], manualVerdicts: JobValueScores["manualVerdicts"] = {}): JobValueScores {
+  const breakdownById = new Map(result.breakdown.map((item) => [item.valueId, item]));
+  const scores = Object.fromEntries(FACTOR_ORDER.map((valueId) => {
+    const item = breakdownById.get(valueId);
+    return [valueId, item ? {
+      score: Math.round(item.score) / 10,
+      source: item.source === "none" ? "user" : item.source,
+      confidence: item.source === "none" ? "none" : result.confidence,
+      reasoning: item.source === "none"
+        ? `No JD/review evidence; rank bonus only (+${item.priorityBonus})`
+        : `Evidence score with a +${item.priorityBonus} rank bonus`,
+    } : {
+      score: null,
+      source: "default" as const,
+      confidence: "none" as const,
+    }];
+  })) as JobValueScores["scores"];
+
+  return {
+    status: result.breakdown.length > 0 ? "calculated" : "not_calculated",
+    calculatedAt: result.breakdown.length > 0 ? new Date().toISOString() : null,
+    scores,
+    weightedScore: result.breakdown.length > 0 ? Math.round(result.matchScore) / 10 : null,
+    rankingSnapshot: ranking,
+    manualVerdicts,
+  };
+}
+
+function valueScoresAreCurrent(application: JobApplication, next: JobValueScores): boolean {
+  const current = application.value_scores;
+  return current?.status === next.status
+    && current.weightedScore === next.weightedScore
+    && JSON.stringify(current.scores || {}) === JSON.stringify(next.scores)
+    && JSON.stringify(current.rankingSnapshot || []) === JSON.stringify(next.rankingSnapshot || [])
+    && JSON.stringify(current.manualVerdicts || {}) === JSON.stringify(next.manualVerdicts || {});
 }
 
 interface SourceResult {
@@ -122,6 +190,7 @@ interface ApplicationDetailContentProps {
   interviewSourceResults?: Record<InterviewSource, InterviewSourceResult>;
   lastInterviewSearchedAt?: string;
   onSearchInterviews: () => Promise<void>;
+  onVerdictChange: (valueId: string, verdict: ValueVerdict) => Promise<void>;
 }
 
 function ApplicationDetailContent({
@@ -143,6 +212,7 @@ function ApplicationDetailContent({
   interviewSourceResults,
   lastInterviewSearchedAt,
   onSearchInterviews,
+  onVerdictChange,
 }: ApplicationDetailContentProps) {
   const { locale } = useI18n();
   const metadata = application as JobApplication & Record<string, unknown>;
@@ -153,6 +223,8 @@ function ApplicationDetailContent({
   const [sourceResumeName, setSourceResumeName] = useState<string | null>(null);
   const [tailoredText, setTailoredText] = useState("");
   const [savingTailoredResume, setSavingTailoredResume] = useState(false);
+  const [isGeneratingTailored, setIsGeneratingTailored] = useState(false);
+  const autoGeneratedResumeKey = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState("about");
   useEffect(() => {
     let current = true;
@@ -180,6 +252,45 @@ function ApplicationDetailContent({
     loadResume().catch((error) => console.error("Failed to load tailored resume", error));
     return () => { current = false; };
   }, [resumeVersionId, application.id]);
+
+  useEffect(() => {
+    const generationKey = `${effectiveResumeVersionId}:${application.id}`;
+    if (
+      activeTab !== "resume" ||
+      !effectiveResumeVersionId ||
+      !sourceResume?.base_plain_text?.trim() ||
+      !tailoredResume ||
+      tailoredResume.customized_plain_text ||
+      tailoredResume.generation_status === "generating" ||
+      autoGeneratedResumeKey.current === generationKey
+    ) return;
+
+    autoGeneratedResumeKey.current = generationKey;
+    setIsGeneratingTailored(true);
+    void (async () => {
+      try {
+        const response = await fetch("/api/resume/customize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ versionId: effectiveResumeVersionId, jobApplicationId: application.id }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || "履歷客製化失敗");
+        const refreshed = await getVersionJobResume(effectiveResumeVersionId, application.id);
+        setTailoredResume(refreshed);
+        setTailoredText(refreshed?.customized_plain_text || "");
+        if (result.data?.baseAtsScore !== undefined) {
+          setSourceResume((current) => current ? { ...current, base_ats_score: result.data.baseAtsScore } : current);
+        }
+        toast.success("已根據 JD 產生客製履歷");
+      } catch (error) {
+        autoGeneratedResumeKey.current = null;
+        toast.error(error instanceof Error ? error.message : "履歷客製化失敗");
+      } finally {
+        setIsGeneratingTailored(false);
+      }
+    })();
+  }, [activeTab, application.id, effectiveResumeVersionId, sourceResume, tailoredResume]);
   const saveTailoredResume = async () => {
     if (!tailoredResume) return;
     setSavingTailoredResume(true);
@@ -215,8 +326,8 @@ function ApplicationDetailContent({
   const displayPosition = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name) ? legacyLinkedInTitle[1].trim() : application.position;
   const displayCompany = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name) ? legacyLinkedInTitle[2].trim() : (/linkedin\.com/i.test(application.company_name) ? (locale === "en" ? "LinkedIn job" : "LinkedIn 職缺") : application.company_name);
   return (
-    <>
-      <div className="p-4 border-b shrink-0">
+    <div className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-hidden">
+      <div className="w-full min-w-0 max-w-full shrink-0 border-b p-4">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold truncate">
@@ -240,26 +351,27 @@ function ApplicationDetailContent({
             void onSearchInterviews();
           }
         }}
-        className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden"
+        className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-hidden"
       >
-        <TabsList className="w-full grid grid-cols-3 shrink-0 rounded-none border-b bg-transparent h-auto p-0">
-          <TabsTrigger value="about" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3">About</TabsTrigger>
-          <TabsTrigger value="resume" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3">Resume</TabsTrigger>
-          <TabsTrigger value="interview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3">Interview</TabsTrigger>
+        <TabsList className="grid w-full min-w-0 shrink-0 grid-cols-3">
+          <TabsTrigger value="about" className="min-w-0">About</TabsTrigger>
+          <TabsTrigger value="resume" className="min-w-0">Resume</TabsTrigger>
+          <TabsTrigger value="interview" className="min-w-0">Interview</TabsTrigger>
         </TabsList>
 
-        <ScrollArea className="flex-1 min-h-0 min-w-0 overflow-hidden">
-          <div className="p-4">
+        <ScrollArea className="min-h-0 min-w-0 w-full max-w-full flex-1 overflow-x-hidden">
+          <div className="min-w-0 w-full max-w-full overflow-x-hidden p-4 pr-8">
             <TabsContent value="about" className="mt-0 space-y-6">
               <JDSection application={application} onUpdate={onJDUpdate} />
               <ScoreSection
                 matchResult={matchResult}
                 userRanking={userRanking}
-                application={application}
                 reviews={reviews}
                 isLoading={isLoadingScore}
                 onRefreshScore={onSearchReviews}
                 isRefreshingScore={isSearchingReviews}
+                manualVerdicts={application.value_scores?.manualVerdicts}
+                onVerdictChange={(valueId, verdict) => void onVerdictChange(valueId, verdict)}
               />
               <ReviewsSection
                 reviews={reviews}
@@ -284,6 +396,11 @@ function ApplicationDetailContent({
                 onTailoredTextChange={setTailoredText}
                 onSaveTailoredResume={saveTailoredResume}
                 onStrengthenResume={strengthenResume}
+                isGeneratingTailored={isGeneratingTailored}
+                coverLetter={(() => {
+                  const value = (application as typeof application & { cover_letter?: unknown }).cover_letter;
+                  return value && typeof value === "object" ? value as import("@/types").CoverLetterDraft : null;
+                })()}
               />
             </TabsContent>
             <TabsContent value="interview" className="mt-0">
@@ -302,7 +419,7 @@ function ApplicationDetailContent({
           </div>
         </ScrollArea>
       </Tabs>
-    </>
+    </div>
   );
 }
 
@@ -355,6 +472,8 @@ export function ApplicationDetailDrawer({
   }, [open, application, isMobile]);
 
   const loadData = async (app: JobApplication) => {
+    setReviews([]);
+    setMatchResult(null);
     // 載入公司評論
     setIsLoadingReviews(true);
     try {
@@ -372,34 +491,20 @@ export function ApplicationDetailDrawer({
     try {
       const ranking = await getValueRanking();
       setUserRanking(ranking);
+      const rankingValues = getRankingValues(ranking);
 
-      if (ranking && ranking.top_values && ranking.top_values.length > 0) {
+      if (rankingValues.length > 0) {
         // 獲取評論用於計算分數
-        const reviewsData = await getCompanyReviewsByName(app.company_name);
-        if (reviewsData && reviewsData.length > 0) {
-          const result = calculateValueMatch(ranking.top_values, reviewsData, getJobEvidenceText(app));
-          setMatchResult(result);
-        if (app.value_scores?.status !== "calculated") {
-          const valueScores = Object.fromEntries(result.breakdown.map((item) => [item.valueId, {
-            score: Math.round(item.contributedScore / 10),
-            source: "reviews" as const,
-            confidence: result.confidence,
-            reasoning: `${item.valueName} based on company review signals`,
-          }]));
-          const updated = await updateJobApplication(app.id, {
-            value_scores: {
-              status: "calculated",
-              calculatedAt: new Date().toISOString(),
-              scores: valueScores,
-            weightedScore: result.matchScore,
-              rankingSnapshot: ranking.top_values,
-            },
-          });
+        const reviewsData = (await getCompanyReviewsByName(app.company_name)) || [];
+        const result = calculateValueMatch(rankingValues, reviewsData, getJobEvidenceText(app));
+        setMatchResult(result);
+        const valueScores = buildStoredValueScores(result, rankingValues, app.value_scores?.manualVerdicts);
+        if (!valueScoresAreCurrent(app, valueScores)) {
+          const updated = await updateJobApplication(app.id, { value_scores: valueScores });
           if (updated) onApplicationUpdate?.(updated);
         }
-        } else {
-          setMatchResult(null);
-        }
+      } else {
+        setMatchResult(null);
       }
     } catch (error) {
       console.error("Failed to load value ranking:", error);
@@ -410,37 +515,23 @@ export function ApplicationDetailDrawer({
     }
   };
 
-  // Reviews and value ranking load independently. Recalculate whenever both
-  // are available so a fast review search cannot race past the ranking load.
+  // Recalculate from whichever evidence is available: the JD, reviews, or both.
   useEffect(() => {
     const ranking = userRanking;
     const app = currentApplication;
-    if (!app || !ranking?.top_values?.length || reviews.length === 0) {
-      if (ranking && !ranking.top_values?.length) setMatchResult(null);
+    const rankingValues = getRankingValues(ranking);
+    if (!app || rankingValues.length === 0) {
+      if (ranking) setMatchResult(null);
       return;
     }
 
-    const result = calculateValueMatch(ranking.top_values, reviews, getJobEvidenceText(app));
+    const result = calculateValueMatch(rankingValues, reviews, getJobEvidenceText(app));
     setMatchResult(result);
 
-    const scoreIsCurrent = app.value_scores?.status === "calculated"
-      && app.value_scores.weightedScore === result.matchScore
-      && JSON.stringify(app.value_scores.rankingSnapshot || []) === JSON.stringify(ranking.top_values);
-    if (scoreIsCurrent) return;
-    const valueScores = Object.fromEntries(result.breakdown.map((item) => [item.valueId, {
-      score: Math.round(item.contributedScore / 10),
-      source: "reviews" as const,
-      confidence: result.confidence,
-      reasoning: `${item.valueName} based on company review signals`,
-    }]));
+    const valueScores = buildStoredValueScores(result, rankingValues, app.value_scores?.manualVerdicts);
+    if (valueScoresAreCurrent(app, valueScores)) return;
     void updateJobApplication(app.id, {
-      value_scores: {
-        status: "calculated",
-        calculatedAt: new Date().toISOString(),
-        scores: valueScores,
-        weightedScore: result.matchScore,
-        rankingSnapshot: ranking.top_values,
-      },
+      value_scores: valueScores,
     }).then((updated) => {
       if (updated) onApplicationUpdate?.(updated);
     }).catch((error) => console.error("Failed to persist value match score:", error));
@@ -517,18 +608,9 @@ export function ApplicationDetailDrawer({
         setLastSearchedAt(result.data.crawledAt);
         await persistReviewScores(currentApplication, apiReviews);
 
-        // 重新計算價值匹配分數
-        if (userRanking && userRanking.top_values && apiReviews.length > 0) {
-          const matchResult = calculateValueMatch(
-            userRanking.top_values,
-            apiReviews,
-            getJobEvidenceText(currentApplication)
-          );
-          setMatchResult(matchResult);
-        }
+        // The ranking/evidence effect recalculates using reviews and JD data.
         if (apiReviews.length === 0) {
-          setMatchResult(null);
-          toast.warning("查詢完成，但目前沒有可用的公司評論，因此無法計算分數");
+          toast.warning("沒有找到公司評論；有職缺資料的項目仍會依 JD 計分");
         } else {
           toast.success(`已取得 ${apiReviews.length} 則評論並重新計算分數`);
         }
@@ -566,21 +648,11 @@ export function ApplicationDetailDrawer({
     const nextReviews = [saved, ...reviews.filter((item) => item.id !== saved.id)];
     setReviews(nextReviews);
     const updates: Record<string, unknown> = { rating_happiness: getCompanyRating(nextReviews) };
-    if (userRanking?.top_values?.length) {
-      const match = calculateValueMatch(userRanking.top_values, nextReviews, getJobEvidenceText(currentApplication));
+    const rankingValues = getRankingValues(userRanking);
+    if (rankingValues.length > 0) {
+      const match = calculateValueMatch(rankingValues, nextReviews, getJobEvidenceText(currentApplication));
       setMatchResult(match);
-      updates.value_scores = {
-        status: "calculated",
-        calculatedAt: new Date().toISOString(),
-        scores: Object.fromEntries(match.breakdown.map((item) => [item.valueId, {
-          score: Math.round(item.contributedScore / 10),
-          source: "reviews" as const,
-          confidence: match.confidence,
-          reasoning: `${item.valueName} based on company review signals`,
-        }])),
-        weightedScore: match.matchScore,
-        rankingSnapshot: userRanking.top_values,
-      };
+      updates.value_scores = buildStoredValueScores(match, rankingValues, currentApplication.value_scores?.manualVerdicts);
     }
     const updated = await updateJobApplication(currentApplication.id, updates as never);
     if (updated) {
@@ -589,6 +661,24 @@ export function ApplicationDetailDrawer({
     }
     toast.success("評論已新增，分數正在重新計算");
   }, [currentApplication, reviews, userRanking, onApplicationUpdate]);
+
+  const handleVerdictChange = useCallback(async (valueId: string, verdict: ValueVerdict) => {
+    if (!currentApplication) return;
+    const existing = currentApplication.value_scores;
+    const valueScores: JobValueScores = {
+      status: existing?.status ?? "not_calculated",
+      calculatedAt: existing?.calculatedAt ?? null,
+      scores: existing?.scores ?? {},
+      weightedScore: existing?.weightedScore ?? null,
+      rankingSnapshot: existing?.rankingSnapshot ?? null,
+      manualVerdicts: { ...existing?.manualVerdicts, [valueId]: verdict },
+    };
+    const updated = await updateJobApplication(currentApplication.id, { value_scores: valueScores });
+    if (updated) {
+      setCurrentApplication(updated);
+      onApplicationUpdate?.(updated);
+    }
+  }, [currentApplication, onApplicationUpdate]);
 
   // 搜尋面試經驗
   const handleSearchInterviews = useCallback(async () => {
@@ -705,7 +795,7 @@ export function ApplicationDetailDrawer({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="bottom"
-          className="h-[min(90dvh,760px)] max-h-[90dvh] min-h-0 overflow-hidden rounded-t-2xl p-0 flex flex-col"
+          className="h-[min(90dvh,760px)] max-h-[90dvh] min-h-0 w-full max-w-full overflow-hidden rounded-t-2xl p-0 flex flex-col"
         >
           <SheetHeader className="sr-only">
             <SheetTitle>{currentApplication.company_name}</SheetTitle>
@@ -730,6 +820,7 @@ export function ApplicationDetailDrawer({
             interviewSourceResults={interviewSourceResults}
             lastInterviewSearchedAt={lastInterviewSearchedAt}
             onSearchInterviews={handleSearchInterviews}
+            onVerdictChange={handleVerdictChange}
           />
         </SheetContent>
       </Sheet>
@@ -762,6 +853,7 @@ export function ApplicationDetailDrawer({
         interviewSourceResults={interviewSourceResults}
         lastInterviewSearchedAt={lastInterviewSearchedAt}
         onSearchInterviews={handleSearchInterviews}
+        onVerdictChange={handleVerdictChange}
       />
     </div>
   );

@@ -81,7 +81,7 @@ export function ApplicationCard({
         "cursor-pointer transition-all hover:shadow-md",
         (isDragging || isSortableDragging) && "opacity-50 shadow-lg cursor-grabbing",
         isSelected && "ring-2 ring-primary bg-primary/5",
-        isMobile && "flex-shrink-0 w-64 snap-start"
+        isMobile && "w-full"
       )}
     >
       <CardContent className="p-3">

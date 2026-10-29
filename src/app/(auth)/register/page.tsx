@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 import { useI18n } from "@/contexts/i18n-context";
 
 export default function RegisterPage() {
@@ -18,11 +18,11 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [returnTo, setReturnTo] = useState("/dashboard");
+  const [returnTo, setReturnTo] = useState("/applications");
 
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("redirectTo") || "/dashboard";
-    setReturnTo(requested.startsWith("/") && !requested.startsWith("//") ? requested : "/dashboard");
+    const requested = new URLSearchParams(window.location.search).get("redirectTo") || "/applications";
+    setReturnTo(requested.startsWith("/") && !requested.startsWith("//") ? requested : "/applications");
   }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -45,8 +45,8 @@ export default function RegisterPage() {
       const result = await response.json();
       if (!response.ok) { toast.error(result.error || t("auth.registerFailed")); return; }
       toast.success(t("auth.registerSuccess"));
-      const requestedRedirect = new URLSearchParams(window.location.search).get("redirectTo") || "/dashboard";
-      const redirectTo = requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//") ? requestedRedirect : "/dashboard";
+      const requestedRedirect = new URLSearchParams(window.location.search).get("redirectTo") || "/applications";
+      const redirectTo = requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//") ? requestedRedirect : "/applications";
       router.push(redirectTo);
     } catch {
       toast.error(t("auth.registerError"));

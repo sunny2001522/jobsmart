@@ -8,15 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 import { useI18n } from "@/contexts/i18n-context";
 
 function LoginForm() {
   const { locale, t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedRedirect = searchParams.get("redirectTo") || "/dashboard";
-  const redirectTo = requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//") ? requestedRedirect : "/dashboard";
+  const requestedRedirect = searchParams.get("redirectTo") || "/applications";
+  const redirectTo = requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//") ? requestedRedirect : "/applications";
 
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState("");

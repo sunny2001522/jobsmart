@@ -180,44 +180,36 @@ export function ReviewsSection({
   return (
     <div className="space-y-4">
       {/* 搜尋按鈕與最後更新時間 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {onSearchReviews && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onSearchReviews}
-              disabled={isSearching}
-            >
-              {isSearching ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Search className="h-4 w-4 mr-2" />
-              )}
-              {isSearching ? (isEnglish ? "Searching..." : "搜尋中...") : (isEnglish ? "Search company reviews" : "搜尋公司評論")}
+      <div className="min-w-0 space-y-2">
+        {onSearchReviews && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full min-w-0 justify-start"
+            onClick={onSearchReviews}
+            disabled={isSearching}
+          >
+            {isSearching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+            <span className="truncate">{isSearching ? (isEnglish ? "Searching..." : "搜尋中...") : (isEnglish ? "Search company reviews" : "搜尋公司評論")}</span>
+          </Button>
+        )}
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          {lastSearchedAt && (
+            <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3 shrink-0" />
+              <span className="truncate">
+                {isEnglish ? "Updated " : "更新於 "}
+                {new Date(lastSearchedAt).toLocaleDateString(isEnglish ? "en-US" : "zh-TW", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          )}
+          {onAddReview && (
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => setIsAddingReview((value) => !value)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              {isEnglish ? "Add review" : "手動新增評論"}
             </Button>
           )}
         </div>
-        {lastSearchedAt && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            <span>
-              {isEnglish ? "Updated " : "更新於 "}
-              {new Date(lastSearchedAt).toLocaleDateString(isEnglish ? "en-US" : "zh-TW", {
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-          </div>
-        )}
-        {onAddReview && (
-          <Button variant="outline" size="sm" onClick={() => setIsAddingReview((value) => !value)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            {isEnglish ? "Add review" : "手動新增評論"}
-          </Button>
-        )}
       </div>
 
       {isAddingReview && onAddReview && (

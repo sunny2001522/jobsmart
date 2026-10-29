@@ -14,6 +14,16 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   User,
   CreditCard,
   Bell,
@@ -53,6 +63,7 @@ function SettingsContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [gmailJustConnected, setGmailJustConnected] = useState(false);
+  const [gmailDisconnectConfirmOpen, setGmailDisconnectConfirmOpen] = useState(false);
 
   // Form states
   const [name, setName] = useState("");
@@ -107,6 +118,14 @@ function SettingsContent() {
     const tursoClient = createClient();
     await tursoClient.auth.signOut();
     window.location.href = "/login";
+  };
+
+  const handleDisconnectGmail = async () => {
+    const response = await fetch("/api/auth/gmail/disconnect", { method: "POST" });
+    if (response.ok && profile) {
+      setProfile({ ...profile, gmail_connected: false, gmail_email: null });
+    }
+    setGmailDisconnectConfirmOpen(false);
   };
 
   const aiCreditsPercentage = profile
@@ -512,17 +531,7 @@ function SettingsContent() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={async () => {
-                        // TODO: 實作斷開連結
-                        if (confirm(copy("確定要斷開 Gmail 連結嗎？", "Disconnect Gmail?"))) {
-                          const response = await fetch("/api/auth/gmail/disconnect", {
-                            method: "POST",
-                          });
-                          if (response.ok) {
-                            setProfile({ ...profile, gmail_connected: false, gmail_email: null });
-                          }
-                        }
-                      }}
+                      onClick={() => setGmailDisconnectConfirmOpen(true)}
                     >
                       <Unlink className="h-4 w-4 mr-1" />
                       {copy("斷開", "Disconnect")}
@@ -550,6 +559,20 @@ function SettingsContent() {
 
         </TabsContent>
       </Tabs>
+      <AlertDialog open={gmailDisconnectConfirmOpen} onOpenChange={setGmailDisconnectConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{copy("確定要斷開 Gmail 連結嗎？", "Disconnect Gmail?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {copy("JobSmart 將無法再建立 Gmail 求職信草稿。", "JobSmart will no longer be able to create Gmail application drafts.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{copy("取消", "Cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDisconnectGmail}>{copy("斷開", "Disconnect")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   getResumeVersion,
   getVersionJobResume,
   updateVersionJobResume,
+  updateResumeVersion,
 } from "@/lib/turso/db";
 
 const customizeSchema = z.object({
@@ -118,6 +119,8 @@ export async function POST(request: NextRequest) {
       additionalContext
     );
 
+    await updateResumeVersion(versionId, { base_ats_score: result.baseAtsScore });
+
     // 儲存結果
     const updated = await updateVersionJobResume(versionJob.id, {
       customized_plain_text: result.customizedContent,
@@ -140,6 +143,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         customizedContent: result.customizedContent,
+        baseAtsScore: result.baseAtsScore,
         atsScore: result.atsScore,
         matchedKeywords: result.matchedKeywords,
         missingKeywords: result.missingKeywords,
@@ -156,6 +160,15 @@ export async function POST(request: NextRequest) {
     }
 
     console.error("Resume customize error:", error);
+
+    // Preserve actionable provider configuration errors for the UI. Other
+    // internal failures remain deliberately generic.
+    if (error instanceof Error && error.message.startsWith("Nebius 驗證失敗")) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 502 }
+      );
+    }
 
     return NextResponse.json(
       { success: false, error: "履歷客製化失敗，請稍後再試" },

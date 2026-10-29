@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useResumeVersions } from "@/hooks";
 import { FileUp, Link2, Loader2, PenLine, Upload } from "lucide-react";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 import { useI18n } from "@/contexts/i18n-context";
 
 interface AddVersionDialogProps {

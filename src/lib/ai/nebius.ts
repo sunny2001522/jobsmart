@@ -23,7 +23,7 @@ export interface CopilotResult {
   evidence: string[];
 }
 
-const MODEL = process.env.NEBIUS_MODEL ?? "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16";
+const MODEL = process.env.NEBIUS_MODEL ?? "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
 const BASE_URL = process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1";
 
 function demoResult(action: CopilotAction, locale: "zh-TW" | "en"): CopilotResult {

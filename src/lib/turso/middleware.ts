@@ -5,7 +5,7 @@ export async function updateSession(request: NextRequest) {
   const isAuthenticated = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
 
   // Protected routes - redirect to login if not authenticated
-  const protectedPaths = ['/dashboard', '/applications', '/resume', '/interview', '/linkedin', '/values', '/companies'];
+  const protectedPaths = ['/applications', '/resume', '/interview', '/linkedin', '/values', '/companies'];
   const isProtectedPath = protectedPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
@@ -25,7 +25,7 @@ export async function updateSession(request: NextRequest) {
 
   if (isAuthPath && isAuthenticated) {
     const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
+    url.pathname = '/applications';
     return NextResponse.redirect(url);
   }
 

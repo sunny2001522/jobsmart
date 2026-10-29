@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 
-// 最大檔案大小 25MB (OpenAI 限制)
+// Keep uploads bounded even when the configured Nebius transcription model
+// accepts larger files.
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
@@ -24,23 +24,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.NEBIUS_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: "OpenAI API 未設定" },
+        { success: false, error: "Nebius API 未設定" },
         { status: 500 }
       );
     }
 
-    const openai = new OpenAI({ apiKey });
+    const baseUrl = (process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1").replace(/\/$/, "");
+    const payload = new FormData();
+    payload.set("file", audioFile);
+    payload.set("model", process.env.NEBIUS_TRANSCRIPTION_MODEL ?? "openai/whisper-large-v3-turbo");
+    payload.set("language", "zh");
+    payload.set("response_format", "json");
 
-    // 使用 Whisper API 轉譯
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: "whisper-1",
-      language: "zh", // 中文
-      response_format: "json",
+    const response = await fetch(`${baseUrl}/audio/transcriptions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: payload,
+      signal: AbortSignal.timeout(60_000),
     });
+    if (!response.ok) throw new Error(`Nebius transcription failed (${response.status})`);
+    const transcription = await response.json() as { text?: string };
+    if (!transcription.text?.trim()) throw new Error("Nebius returned an empty transcription");
 
     return NextResponse.json({
       success: true,
@@ -53,7 +60,6 @@ export async function POST(request: NextRequest) {
     console.error("Transcription error:", error);
 
     if (error instanceof Error) {
-      // OpenAI API 錯誤
       if (error.message.includes("Invalid file format")) {
         return NextResponse.json(
           { success: false, error: "不支援的音訊格式" },

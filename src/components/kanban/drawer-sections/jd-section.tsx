@@ -18,6 +18,18 @@ interface JDSectionProps {
   }) => Promise<void>;
 }
 
+function cleanJdDescription(value: string): string {
+  const navigationNoise = /(?:Menu icon|Close icon|Caret (?:down|up|right|left) icon|Accordion is (?:closed|open), click to (?:open|close)\.|Click to (?:expand|collapse)(?: menu)?\.|Skip to main content|Shopping Cart|Search icon)/gi;
+  const cleaned = value
+    .replace(navigationNoise, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Some crawlers return the entire site shell before the actual JD. Keep
+  // the rendered panel usable even when that shell slipped through parsing.
+  return cleaned.length > 6000 ? `${cleaned.slice(0, 6000).trim()}…` : cleaned;
+}
+
 export function JDSection({ application, onUpdate }: JDSectionProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [jdInput, setJdInput] = useState("");
@@ -41,7 +53,8 @@ export function JDSection({ application, onUpdate }: JDSectionProps) {
 
   const jdContentZh = application.jd_content_zh;
 
-  const hasJdContent = jdContent?.description || jdContent?.requirements?.length;
+  const displayDescription = jdContent?.description ? cleanJdDescription(jdContent.description) : "";
+  const hasJdContent = displayDescription || jdContent?.requirements?.length;
 
   // 翻譯 JD 內容
   const handleTranslate = async () => {
@@ -446,8 +459,8 @@ export function JDSection({ application, onUpdate }: JDSectionProps) {
                   </Button>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                {jdContent?.description}
+              <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                {displayDescription}
               </p>
             </div>
 

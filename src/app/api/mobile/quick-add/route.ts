@@ -33,6 +33,7 @@ import {
   getVersionJobResume,
   getProfile,
 } from "@/lib/turso/db";
+import { extractJobTextFromHTML, normalizeJobList, normalizeJobText } from "@/lib/crawler/job-description";
 
 // 請求 schema
 const quickAddSchema = z.object({
@@ -64,6 +65,8 @@ function getSiteName(url: string): string | null {
 
 // 清理 HTML
 function extractTextFromHTML(html: string): string {
+  return extractJobTextFromHTML(html);
+  /*
   let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
   text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "");
   text = text.replace(/<!--[\s\S]*?-->/g, "");
@@ -82,6 +85,7 @@ function extractTextFromHTML(html: string): string {
   text = text.replace(/\s+/g, " ");
   text = text.replace(/\n\s*\n/g, "\n\n");
   return text.trim();
+  */
 }
 
 // 從求職網站抓取 JD
@@ -113,6 +117,8 @@ async function fetchJobFromUrl(url: string) {
     systemPrompt: `你是一個專業的職缺資訊提取專家。請從以下網頁內容中提取職缺資訊。
 這是來自 ${siteName || "求職網站"} 的職缺頁面。
 
+輸入可能包含網站導覽列、頁尾、登入按鈕、選單文字或重複的網站 UI，全部忽略，只保留職缺本身的內容。description 請保留段落與條列的換行，不要把多個段落串成一行。
+
 請返回 JSON 格式：
 {
   "companyName": "公司名稱",
@@ -143,15 +149,15 @@ async function fetchJobFromUrl(url: string) {
   return {
     companyName: parsed.companyName || "未知公司",
     position: parsed.position || "未知職位",
-    description: parsed.description || "",
-    requirements: parsed.requirements || [],
-    responsibilities: parsed.responsibilities || [],
-    benefits: parsed.benefits || [],
-    keywords: parsed.keywords || [],
-    salary: parsed.salary,
-    location: parsed.location,
-    contactEmail: parsed.contactEmail,
-    applicationInstruction: parsed.applicationInstruction,
+    description: normalizeJobText(parsed.description),
+    requirements: normalizeJobList(parsed.requirements),
+    responsibilities: normalizeJobList(parsed.responsibilities),
+    benefits: normalizeJobList(parsed.benefits),
+    keywords: normalizeJobList(parsed.keywords),
+    salary: normalizeJobText(parsed.salary),
+    location: normalizeJobText(parsed.location),
+    contactEmail: normalizeJobText(parsed.contactEmail),
+    applicationInstruction: normalizeJobText(parsed.applicationInstruction),
     sourceUrl: url,
     sourceSite: siteName,
   };

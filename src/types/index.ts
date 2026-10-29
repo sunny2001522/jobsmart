@@ -161,6 +161,15 @@ export interface JobApplication {
   category_id: string | null;
   created_at: string;
   updated_at: string;
+  cover_letter?: CoverLetterDraft | null;
+}
+
+export interface CoverLetterDraft {
+  subject: string;
+  body: string;
+  htmlBody?: string;
+  attachmentNote: string;
+  followUpDate: string;
 }
 
 // 履歷 (對應 resumes 資料表)
@@ -240,7 +249,7 @@ export interface LinkedInGeneration {
 export interface AIUsageLog {
   id: string;
   user_id: string;
-  model: 'gemini-flash' | 'gemini-pro' | 'gpt-4' | 'gpt-4-turbo' | 'whisper';
+  model: 'nebius-nemotron' | 'nebius-whisper';
   task_type: string;
   input_tokens: number | null;
   output_tokens: number | null;
@@ -379,6 +388,8 @@ export interface ValueScore {
   reasoning?: string;  // 評分依據
 }
 
+export type ValueVerdict = 'positive' | 'negative' | 'neutral' | 'unknown';
+
 // 職缺的價值觀評分（存儲在 job_applications.value_scores）
 export interface JobValueScores {
   status: 'not_calculated' | 'calculating' | 'calculated' | 'failed';
@@ -386,6 +397,9 @@ export interface JobValueScores {
   scores: Record<string, ValueScore>;  // 20 個因素的評分
   weightedScore: number | null;  // 加權總分 0-10
   rankingSnapshot: string[] | null;  // 計算時使用的用戶排序快照
+  // User choices shown in the compact values list. They intentionally
+  // override AI evidence without changing the stored evidence score.
+  manualVerdicts?: Partial<Record<string, ValueVerdict>>;
 }
 
 // 因素元數據

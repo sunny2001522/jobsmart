@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { customizeResume } from "@/lib/ai/gateway";
+import { generateCoverLetter } from "@/lib/ai/cover-letter";
 import { dispatch } from "@/lib/turso/repository";
 import { ensureTursoSchema, getTursoClient } from "@/lib/turso/server";
 
 function extractJd(application: Record<string, unknown>) {
   const content = application.jd_content;
+  if (typeof content === "string") return content.trim();
   if (content && typeof content === "object") {
     const record = content as Record<string, unknown>;
     return [record.description, record.requirements, record.responsibilities, record.benefits]
@@ -45,6 +47,15 @@ export async function POST(request: Request) {
     await dispatch("updateVersionJobResume", [recoveryRelationId, { generation_status: "generating" }]);
 
     const tailored = await customizeResume(String(version.base_plain_text), jd, String(application.company_name), String(application.position));
+    await dispatch("updateResumeVersion", [versionId, { base_ats_score: tailored.baseAtsScore }]);
+    const coverLetter = await generateCoverLetter({
+      companyName: String(application.company_name),
+      position: String(application.position),
+      jobDescription: jd,
+      resumePlainText: tailored.customizedContent,
+      applicantName: String((version as Record<string, unknown>).name || ""),
+      contactEmail: String(application.contact_email || ""),
+    });
     const saved = await dispatch("updateVersionJobResume", [recoveryRelationId, {
       customized_plain_text: tailored.customizedContent,
       ats_score: tailored.atsScore,
@@ -55,8 +66,13 @@ export async function POST(request: Request) {
       generated_at: new Date().toISOString(),
     }]);
     if (!saved) throw new Error("客製履歷儲存失敗");
-    const savedApplication = await dispatch("updateJobApplication", [applicationId, { status: "editing", resume_status: "needs_review", resume_version_id: versionId }]);
-    return NextResponse.json({ data: { application: savedApplication, applicationId, versionId, versionName: version.name, relationId: recoveryRelationId, jdContent: jd, ...tailored } });
+    const savedApplication = await dispatch("updateJobApplication", [applicationId, {
+      status: "editing",
+      resume_status: "needs_review",
+      resume_version_id: versionId,
+      cover_letter: coverLetter,
+    }]);
+    return NextResponse.json({ data: { application: savedApplication, applicationId, versionId, versionName: version.name, relationId: recoveryRelationId, jdContent: jd, coverLetter, ...tailored } });
   } catch (error) {
     console.error("Failed to approve application", error);
     if (recoveryRelationId) {

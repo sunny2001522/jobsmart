@@ -14,7 +14,7 @@ TURSO_DATABASE_URL
 TURSO_AUTH_TOKEN
 NEBIUS_API_KEY
 NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1
-NEBIUS_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+NEBIUS_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
 ```
 
 ## Container

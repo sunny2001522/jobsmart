@@ -29,7 +29,7 @@ Open `http://localhost:3004`. Nebius credentials are optional for the public pre
 ```env
 NEBIUS_API_KEY=...
 NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1
-NEBIUS_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+NEBIUS_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
 ```
 
 ## Demo script (90 seconds)

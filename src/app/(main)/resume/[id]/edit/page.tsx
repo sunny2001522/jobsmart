@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Save, Download, Sparkles, FileText, Loader2 } from "lucide-react";
 import { useResumeVersion } from "@/hooks";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 
 interface ResumeEditPageProps {
   params: Promise<{ id: string }>;

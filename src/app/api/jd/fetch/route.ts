@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { aiGateway } from "@/lib/ai/gateway";
+import { extractJobTextFromHTML, normalizeJobList, normalizeJobText } from "@/lib/crawler/job-description";
 
 const fetchJDSchema = z.object({
   url: z.string().url("請輸入有效的網址"),
@@ -26,6 +27,8 @@ function getSiteName(url: string): string | null {
 
 // 清理 HTML 標籤，提取純文字
 function extractTextFromHTML(html: string): string {
+  return extractJobTextFromHTML(html);
+  /*
   // 移除 script 和 style 標籤及其內容
   let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
   text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "");
@@ -59,6 +62,7 @@ function extractTextFromHTML(html: string): string {
   text = text.trim();
 
   return text;
+  */
 }
 
 // 使用 AI 從網頁內容中提取 JD
@@ -91,6 +95,8 @@ async function extractJDFromContent(
 7. 關鍵技能和關鍵字
 8. 薪資範圍（如果有）
 9. 工作地點（如果有）
+
+重要：輸入可能包含網站導覽列、頁尾、登入按鈕、購物車、選單文字或重複的網站 UI，全部忽略，只保留這個職缺本身的內容。description 請保留段落與條列的換行；不要把多個段落串成一行，也不要加入輸入中不存在的內容。
 
 請返回 JSON 格式：
 {
@@ -133,13 +139,13 @@ async function extractJDFromContent(
     return {
       companyName: parsed.companyName || "",
       position: parsed.position || "",
-      description: parsed.description || "",
-      requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
-      responsibilities: Array.isArray(parsed.responsibilities) ? parsed.responsibilities : [],
-      benefits: Array.isArray(parsed.benefits) ? parsed.benefits : [],
-      keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
-      salary: parsed.salary || undefined,
-      location: parsed.location || undefined,
+      description: normalizeJobText(parsed.description),
+      requirements: normalizeJobList(parsed.requirements),
+      responsibilities: normalizeJobList(parsed.responsibilities),
+      benefits: normalizeJobList(parsed.benefits),
+      keywords: normalizeJobList(parsed.keywords),
+      salary: normalizeJobText(parsed.salary) || undefined,
+      location: normalizeJobText(parsed.location) || undefined,
     };
   } catch (error) {
     console.error("Failed to parse AI response:", error);

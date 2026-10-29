@@ -2,7 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import type { ReactNode } from "react";
-import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { ApplicationCard } from "./application-card";
 import { cn } from "@/lib/utils";
@@ -57,11 +57,11 @@ export function KanbanColumn({ id, title, applications, selectedApplicationId, s
 
       <SortableContext
         items={applications.map((app) => app.id)}
-        strategy={isMobile ? horizontalListSortingStrategy : verticalListSortingStrategy}
+        strategy={verticalListSortingStrategy}
       >
         <div className={cn(
           isMobile
-            ? "flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory -mx-3 px-3 scrollbar-hide"
+            ? "space-y-2 min-h-[120px]"
             : "space-y-2 min-h-[200px]"
         )}>
           {applications.map((application) => (
@@ -78,7 +78,7 @@ export function KanbanColumn({ id, title, applications, selectedApplicationId, s
           {applications.length === 0 && (
             <div className={cn(
               "flex items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg",
-              isMobile ? "min-w-[200px] h-24 flex-shrink-0 snap-start" : "h-24"
+              isMobile ? "h-24" : "h-24"
             )}>
               <p className="text-xs text-muted-foreground">{locale === "en" ? "No applications yet" : "拖曳卡片至此"}</p>
             </div>

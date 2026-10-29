@@ -412,6 +412,42 @@ export const englishControlTranslations: Record<string, string> = {
   "填寫公司名稱與職位名稱。": "Enter a company name and job title.",
   "職缺描述": "Job description",
   "職缺描述尚未提供": "No job description provided",
+  "刪除類別": "Delete category",
+  "編輯名稱": "Edit name",
+  "確定要刪除此類別嗎？": "Delete this category?",
+  "此類別下的求職申請將會變成「未分類」，可以在「全部」Tab 中查看。": "Applications in this category will become uncategorized and remain available under All.",
+  "確定要刪除這個履歷版本嗎？": "Delete this resume version?",
+  "刪除後，該版本的基礎履歷和所有客製化履歷都會被刪除，此操作無法復原。": "Deleting this version will also delete its base resume and all tailored resumes. This cannot be undone.",
+  "審核客製履歷": "Review tailored resume",
+  "評估職缺並準備履歷": "Review job and prepare your resume",
+  "檢查完整職缺描述與履歷適配後，再建立客製草稿。": "Review the full job description and resume fit before creating a tailored draft.",
+  "職缺原頁": "Original job listing",
+  "職缺描述（確認完整，資料不足請補貼）": "Job description (check that it is complete; paste any missing details)",
+  "AI 會建立一份獨立草稿，不會覆寫原履歷。適配與 ATS 分數是估算結果；請確認每項經歷都真實、可佐證。": "AI will create a separate draft without changing your original resume. Match and ATS scores are estimates; verify that every experience is accurate and supported.",
+  "AI 預估 ATS": "AI-estimated ATS score",
+  "估算值，不代表錄取機率": "Estimate only; it does not represent your chances of receiving an offer.",
+  "JD 關鍵字吻合": "JD keyword match",
+  "依 AI 列出的關鍵字估算": "Estimated from the keywords identified by AI.",
+  "已涵蓋關鍵字": "Matched keywords",
+  "尚未涵蓋": "Missing keywords",
+  "沒有可確認的匹配項": "No confirmed matches",
+  "事實審核": "Fact check",
+  "未發現無根據主張": "No unsupported claims found",
+  "有項目需要確認": "Items need review",
+  "責任或成果可能被放大": "Responsibility or outcome may be overstated",
+  "缺少履歷依據": "No resume evidence",
+  "原履歷依據：": "Resume evidence: ",
+  "JD 條件與履歷證據": "JD requirements and resume evidence",
+  "履歷未提供可引用證據": "No supporting evidence in the resume",
+  "必要": "Required",
+  "加分": "Preferred",
+  "有證據": "Supported",
+  "部分符合": "Partially supported",
+  "缺口": "Missing",
+  "改善建議": "Suggestions for improvement",
+  "履歷客製草稿 ·": "Tailored resume draft ·",
+  "檢視原履歷": "View original resume",
+  "送出前請逐項核對公司、日期、成果數字與技能。JobSmart 不會替你按下 LinkedIn 最後的送出按鈕。": "Before submitting, verify the company, dates, outcome metrics, and skills. JobSmart will not submit the application on LinkedIn for you.",
 };
 
 const controlSelector = "button, a, summary, label, input, textarea, select, [role='button'], [role='option'], [role='tab'], [role='menuitem']";
@@ -446,6 +482,8 @@ function translateTextNodes(root: Node) {
       if (resumeCountMatch) translation = `${resumeCountMatch[1]} resume${resumeCountMatch[1] === "1" ? "" : "s"}`;
       const linkedinSourceMatch = source.match(/^從「(.+)」生成優化的 LinkedIn 內容$/);
       if (linkedinSourceMatch) translation = `Generate optimized LinkedIn content from “${linkedinSourceMatch[1]}”`;
+      const characterCountMatch = source.match(/^(\d+) 字$/);
+      if (characterCountMatch) translation = `${characterCountMatch[1]} characters`;
     }
     if (!translation) {
       const countMatch = source.match(/^(全部|已收藏|面試|收藏)\s*\((\d+)\)$/);

@@ -22,7 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useResumeVersion, useJobApplications } from "@/hooks";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 import {
   Sheet,
   SheetContent,

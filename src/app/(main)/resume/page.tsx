@@ -9,7 +9,7 @@ import { JobCategoryTabs } from "@/components/job-category-tabs";
 import { useResumeVersions } from "@/hooks";
 import { useJobCategoryContext } from "@/contexts/job-category-context";
 import { Plus, FileText, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 import {
   AlertDialog,
   AlertDialogAction,

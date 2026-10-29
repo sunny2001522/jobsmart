@@ -71,7 +71,7 @@ export function KanbanBoard({ applications, showSummaries = true, onApplicationU
   return (
     <>
       <div className={cn(
-        "min-w-0 min-h-0 h-[calc(100vh-220px)]",
+        "w-full min-w-0 max-w-full min-h-0 h-[calc(100vh-220px)] overflow-x-hidden",
         isMobile ? "flex flex-col overflow-y-auto" : "flex gap-4"
       )}>
         {/* Kanban columns */}

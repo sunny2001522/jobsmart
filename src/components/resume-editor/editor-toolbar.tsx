@@ -1,8 +1,18 @@
 "use client";
 
 import { Editor } from "@tiptap/react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Bold,
   Italic,
@@ -18,15 +28,32 @@ import {
   Link,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/contexts/i18n-context";
 
 interface EditorToolbarProps {
   editor: Editor | null;
 }
 
 export function EditorToolbar({ editor }: EditorToolbarProps) {
+  const { locale } = useI18n();
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
   if (!editor) {
     return null;
   }
+
+  const isEnglish = locale === "en";
+  const openLinkDialog = () => {
+    setLinkUrl(editor.getAttributes("link").href || "");
+    setLinkDialogOpen(true);
+  };
+  const applyLink = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const url = linkUrl.trim();
+    if (!url) return;
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+    setLinkDialogOpen(false);
+  };
 
   const ToolbarButton = ({
     onClick,
@@ -55,6 +82,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
   );
 
   return (
+    <>
     <div className="flex flex-wrap items-center gap-1 border-b p-2">
       {/* 歷史操作 */}
       <ToolbarButton
@@ -174,17 +202,42 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
 
       {/* 連結 */}
       <ToolbarButton
-        onClick={() => {
-          const url = window.prompt("輸入連結網址：");
-          if (url) {
-            editor.chain().focus().setLink({ href: url }).run();
-          }
-        }}
+        onClick={openLinkDialog}
         isActive={editor.isActive("link")}
         title="插入連結"
       >
         <Link className="h-4 w-4" />
       </ToolbarButton>
     </div>
+    <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+      <DialogContent>
+        <form onSubmit={applyLink}>
+          <DialogHeader>
+            <DialogTitle>{isEnglish ? "Add link" : "插入連結"}</DialogTitle>
+            <DialogDescription>
+              {isEnglish ? "Enter the URL for the selected text." : "輸入要套用到所選文字的網址。"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              autoFocus
+              type="url"
+              value={linkUrl}
+              onChange={(event) => setLinkUrl(event.target.value)}
+              placeholder="https://example.com"
+              aria-label={isEnglish ? "Link URL" : "連結網址"}
+              required
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setLinkDialogOpen(false)}>
+              {isEnglish ? "Cancel" : "取消"}
+            </Button>
+            <Button type="submit">{isEnglish ? "Apply link" : "套用連結"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

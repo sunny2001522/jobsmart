@@ -1,14 +1,17 @@
 import type { CompanyReview } from "@/types";
-import { VALUE_KEYWORD_MAP, VALUE_METADATA, SENTIMENT_WEIGHTS } from "./config";
+import { FACTOR_METADATA, FACTOR_ORDER, VALUE_KEYWORD_MAP } from "./factors-config";
+import { VALUE_METADATA, SENTIMENT_WEIGHTS } from "./config";
 
 export interface ScoreBreakdown {
   valueId: string;
   valueName: string;
   valueEmoji: string;
   userPriority: number;
-  contributedScore: number;
-  maxPossibleScore: number;
+  score: number;
+  priorityBonus: number;
   isMatched: boolean;
+  quality: "good" | "okay" | "bad" | "unknown";
+  source: "jd" | "reviews" | "both" | "none";
 }
 
 export interface ValueMatchResult {
@@ -18,137 +21,144 @@ export interface ValueMatchResult {
 }
 
 interface ValueMention {
-  valueId: string;
   count: number;
   positiveCount: number;
   negativeCount: number;
   sentimentScore: number;
+  hasJdEvidence: boolean;
+  hasReviewEvidence: boolean;
 }
 
-/**
- * 從公司評論中提取價值觀提及
- */
+const VALUE_EMOJIS: Record<string, string> = {
+  salary: "💰", benefits: "🎁", growth: "📈", learning: "📚", stability: "🏠",
+  autonomy: "🎯", flexibility: "⏰", remote: "🏡", location: "📍", teamwork: "👥",
+  colleagues: "🤝", manager: "🧑‍💼", achievement: "🏆", recognition: "⭐", impact: "🌍",
+  challenge: "🔥", creativity: "💡", independence: "🧘", culture: "🏢", balance: "⚖️",
+};
+
+// Default card order from Values Explorer, used until a user saves a ranking.
+const DEFAULT_VALUE_RANKING = [
+  "salary", "balance", "growth", "stability", "learning", "autonomy", "flexibility", "remote",
+  "teamwork", "colleagues", "manager", "achievement", "recognition", "impact", "challenge",
+  "creativity", "culture", "independence", "benefits", "location",
+];
+
+/** Keep legacy or partial rankings usable while scoring all 20 factors. */
+export function getCompleteValueRanking(ranking: string[]): string[] {
+  const validIds = new Set<string>(FACTOR_ORDER);
+  const ordered = ranking.filter((id, index) => validIds.has(id) && ranking.indexOf(id) === index);
+  DEFAULT_VALUE_RANKING.forEach((id) => {
+    if (!ordered.includes(id)) ordered.push(id);
+  });
+  return ordered;
+}
+
 function extractValueMentions(reviews: CompanyReview[], jdText = ""): Map<string, ValueMention> {
   const mentions = new Map<string, ValueMention>();
-
-  // 初始化所有價值觀
-  Object.keys(VALUE_KEYWORD_MAP).forEach((valueId) => {
+  FACTOR_ORDER.forEach((valueId) => {
     mentions.set(valueId, {
-      valueId,
       count: 0,
       positiveCount: 0,
       negativeCount: 0,
       sentimentScore: 0,
+      hasJdEvidence: false,
+      hasReviewEvidence: false,
     });
   });
 
-  // 遍歷評論與 JD 提取關鍵詞；JD 本身視為中性證據，不會被當成正面評論。
-  const sources = jdText.trim()
-    ? [...reviews, { content: jdText, title: null, sentiment: "neutral" as const } as CompanyReview]
-    : reviews;
-  sources.forEach((review) => {
-    const content = review.content.toLowerCase();
-    const sentiment = review.sentiment || "neutral";
+  const sources = [
+    ...reviews.map((review) => ({ review, source: "reviews" as const })),
+    ...(jdText.trim() ? [{
+      review: { content: jdText, title: null, sentiment: "neutral" as const } as CompanyReview,
+      source: "jd" as const,
+    }] : []),
+  ];
 
+  sources.forEach(({ review, source }) => {
+    const content = `${review.content || ""} ${review.title || ""}`.toLowerCase();
     Object.entries(VALUE_KEYWORD_MAP).forEach(([valueId, keywords]) => {
-      const hasKeyword = keywords.some(
-        (keyword) =>
-          content.includes(keyword.toLowerCase()) ||
-          (review.title && review.title.toLowerCase().includes(keyword.toLowerCase()))
-      );
+      const hasKeyword = keywords.some((keyword) => content.includes(keyword.toLowerCase()));
+      if (!hasKeyword) return;
 
-      if (hasKeyword) {
-        const mention = mentions.get(valueId)!;
-        mention.count++;
+      const mention = mentions.get(valueId);
+      if (!mention) return;
+      mention.count++;
+      if (source === "jd") mention.hasJdEvidence = true;
+      else mention.hasReviewEvidence = true;
 
-        if (sentiment === "positive") {
-          mention.positiveCount++;
-        } else if (sentiment === "negative") {
-          mention.negativeCount++;
-        }
-      }
+      const sentiment = review.sentiment || "neutral";
+      if (sentiment === "positive") mention.positiveCount++;
+      else if (sentiment === "negative") mention.negativeCount++;
     });
   });
 
-  // 計算每個價值觀的情緒分數
   mentions.forEach((mention) => {
-    if (mention.count > 0) {
-      // 情緒分數 = (正面評論數 * 1.0 + 中立評論數 * 0.5) / 總數
-      const neutralCount = mention.count - mention.positiveCount - mention.negativeCount;
-      mention.sentimentScore =
-        (mention.positiveCount * SENTIMENT_WEIGHTS.positive +
-          neutralCount * SENTIMENT_WEIGHTS.neutral +
-          mention.negativeCount * SENTIMENT_WEIGHTS.negative) /
-        mention.count;
-    }
+    if (mention.count === 0) return;
+    const neutralCount = mention.count - mention.positiveCount - mention.negativeCount;
+    mention.sentimentScore =
+      (mention.positiveCount * SENTIMENT_WEIGHTS.positive +
+        neutralCount * SENTIMENT_WEIGHTS.neutral +
+        mention.negativeCount * SENTIMENT_WEIGHTS.negative) /
+      mention.count;
   });
 
   return mentions;
 }
 
 /**
- * 計算價值觀匹配分數
+ * Score all ranked factors. Evidence scores occupy 0–80; the user's rank adds
+ * 20 points for first place down to 1 for twentieth. With no evidence, the
+ * factor still receives its rank bonus and remains marked as unknown.
  */
 export function calculateValueMatch(
-  userTopValues: string[],
+  userRanking: string[],
   reviews: CompanyReview[],
   jdText = ""
 ): ValueMatchResult {
-  // 提取公司在評論中被提及的價值觀
+  const ranking = getCompleteValueRanking(userRanking);
   const valueMentions = extractValueMentions(reviews, jdText);
-
-  // 計算每個用戶價值觀的匹配分數
   const breakdown: ScoreBreakdown[] = [];
-  let totalWeightedScore = 0;
-  let totalWeight = 0;
 
-  userTopValues.forEach((valueId, index) => {
-    // 權重：第 1 名 = 100%, 第 2 名 = 80%, 第 3 名 = 60%, ...
-    const priorityWeight = Math.max(0.2, 1 - index * 0.2);
+  ranking.forEach((valueId, index) => {
     const mention = valueMentions.get(valueId);
-    const metadata = VALUE_METADATA[valueId] || {
-      name: valueId,
-      emoji: "📊",
-      description: "",
-    };
+    if (!mention) return;
 
-    // 判斷是否匹配：有提及且情緒分數 >= 0.5
-    const isMatched = mention ? mention.count > 0 && mention.sentimentScore >= 0.5 : false;
-
-    // 計算貢獻分數
-    let contributedScore = 0;
-    if (mention && mention.count > 0) {
-      // 基礎分數來自情緒分數 (0-100)
-      contributedScore = mention.sentimentScore * 100;
-    }
-
-    const maxPossibleScore = priorityWeight * 100;
-    const weightedScore = contributedScore * priorityWeight;
-
-    totalWeightedScore += weightedScore;
-    totalWeight += maxPossibleScore;
+    const metadata = VALUE_METADATA[valueId];
+    const factorMetadata = FACTOR_METADATA[valueId];
+    const priorityBonus = 20 - index;
+    const hasEvidence = mention.count > 0;
+    const isMatched = mention.sentimentScore >= 0.5;
+    const quality: ScoreBreakdown["quality"] = !hasEvidence
+      ? "unknown"
+      : mention.sentimentScore >= 0.75
+        ? "good"
+        : isMatched ? "okay" : "bad";
+    const evidenceScore = hasEvidence ? Math.round(mention.sentimentScore * 80) : 0;
+    const score = evidenceScore + priorityBonus;
 
     breakdown.push({
       valueId,
-      valueName: metadata.name,
-      valueEmoji: metadata.emoji,
+      valueName: metadata?.name || factorMetadata.name,
+      valueEmoji: metadata?.emoji || VALUE_EMOJIS[valueId] || "📊",
       userPriority: index + 1,
-      contributedScore: contributedScore,
-      maxPossibleScore: maxPossibleScore,
+      score,
+      priorityBonus,
       isMatched,
+      quality,
+      source: !hasEvidence
+        ? "none"
+        : mention.hasJdEvidence && mention.hasReviewEvidence
+          ? "both"
+          : mention.hasJdEvidence ? "jd" : "reviews",
     });
   });
 
-  // 計算總分 (0-100)
-  const matchScore = totalWeight > 0 ? Math.round(totalWeightedScore / totalWeight * 100) : 0;
-
-  // 計算信心度：基於有多少評論
+  const averageScore = breakdown.length > 0
+    ? Math.round(breakdown.reduce((total, item) => total + item.score, 0) / breakdown.length)
+    : 0;
+  const matchScore = averageScore;
   const confidence: "high" | "medium" | "low" =
     reviews.length >= 10 ? "high" : reviews.length >= 5 ? "medium" : "low";
 
-  return {
-    matchScore,
-    breakdown,
-    confidence,
-  };
+  return { matchScore, breakdown, confidence };
 }

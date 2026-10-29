@@ -1,67 +1,26 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import OpenAI from "openai";
-
 // AI 任務類型
 export type AITaskType =
-  | "keyword_extraction"           // 關鍵字提取 -> Gemini
-  | "sentiment_analysis"           // 情緒分析 -> Gemini
-  | "text_summary"                 // 文字摘要 -> Gemini
-  | "resume_draft"                 // 履歷草稿 -> Gemini Pro
-  | "resume_optimization"          // 履歷優化 -> GPT-4
-  | "resume_customization"         // 履歷客製化 -> GPT-4
-  | "interview_feedback"           // 面試評分 -> GPT-4
-  | "linkedin_generate"            // LinkedIn 生成 -> GPT-4
-  | "jd_analysis"                  // JD 分析 -> Gemini
-  | "jd_value_analysis"            // JD 價值觀分析 -> Gemini
-  | "jd_translation"               // JD 中文翻譯 -> Gemini
-  | "interview_extraction"         // 面試經驗提取 -> Gemini
-  | "social_post_extraction"       // 社群貼文職缺提取 -> Gemini
-  | "job_category_classification"  // 職缺類別判斷 -> Gemini
-  | "cover_letter_generation";     // 求職信生成 -> GPT-4
+  | "keyword_extraction"
+  | "sentiment_analysis"
+  | "text_summary"
+  | "resume_draft"
+  | "resume_optimization"
+  | "resume_customization"
+  | "interview_feedback"
+  | "linkedin_generate"
+  | "jd_analysis"
+  | "jd_value_analysis"
+  | "jd_translation"
+  | "interview_extraction"
+  | "social_post_extraction"
+  | "job_category_classification"
+  | "cover_letter_generation";
 
 // 模型路由映射
-const TASK_MODEL_MAPPING: Record<AITaskType, string> = {
-  keyword_extraction: "gemini-2.0-flash",
-  sentiment_analysis: "gemini-2.0-flash",
-  text_summary: "gemini-2.0-flash",
-  resume_draft: "gemini-2.0-flash",
-  resume_optimization: "gpt-4-turbo",
-  resume_customization: "gpt-4-turbo",
-  interview_feedback: "gpt-4-turbo",
-  linkedin_generate: "gpt-4-turbo",
-  jd_analysis: "gemini-2.0-flash",
-  jd_value_analysis: "gemini-2.0-flash",
-  jd_translation: "gemini-2.0-flash",
-  interview_extraction: "gemini-2.0-flash",
-  social_post_extraction: "gemini-2.0-flash",
-  job_category_classification: "gemini-2.0-flash",
-  cover_letter_generation: "gpt-4-turbo",
-};
+const NEBIUS_MODEL = process.env.NEBIUS_MODEL ?? "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
+const NEBIUS_BASE_URL = (process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1").replace(/\/$/, "");
 
-// 初始化 Gemini
-function getGeminiClient() {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GOOGLE_AI_API_KEY is not set");
-  }
-  return new GoogleGenerativeAI(apiKey);
-}
-
-// 初始化 OpenAI 相容端點：優先使用 OpenAI，未設定時改用 Nebius Token Factory
-function getOpenAIClient(): { client: OpenAI; provider: "openai" | "nebius" } {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (apiKey) return { client: new OpenAI({ apiKey }), provider: "openai" };
-  const nebiusKey = process.env.NEBIUS_API_KEY;
-  if (nebiusKey) {
-    return {
-      client: new OpenAI({ apiKey: nebiusKey, baseURL: process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1" }),
-      provider: "nebius",
-    };
-  }
-  throw new Error("尚未設定 AI 金鑰：請在環境變數設定 OPENAI_API_KEY 或 NEBIUS_API_KEY");
-}
-
-// 從模型輸出取出 JSON：容忍 ```json 區塊、<think> 推理段落與前後說明文字
+// Handle JSON returned inside markdown fences or alongside model commentary.
 export function parseJsonResponse<T = Record<string, unknown>>(text: string): T {
   const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```(?:json)?/gi, "").trim();
   try { return JSON.parse(cleaned) as T; } catch { /* fall through */ }
@@ -82,19 +41,13 @@ export async function aiGateway(
     json?: boolean;
   }
 ): Promise<{ text: string; model: string; usage?: { input: number; output: number } }> {
-  const model = TASK_MODEL_MAPPING[taskType];
-  const isGemini = model.startsWith("gemini");
-
-  if (isGemini) {
-    return callGemini(model, prompt, options);
-  } else {
-    return callOpenAI(model, prompt, options);
-  }
+  return callNebius(prompt, options);
 }
 
-// Gemini API 調用
-async function callGemini(
-  model: string,
+// Nebius Token Factory provides an OpenAI-compatible chat-completions API.
+// Keeping this boundary provider-specific prevents individual career flows from
+// accidentally falling back to a different AI vendor.
+async function callNebius(
   prompt: string,
   options?: {
     systemPrompt?: string;
@@ -102,78 +55,40 @@ async function callGemini(
     maxTokens?: number;
   }
 ): Promise<{ text: string; model: string; usage?: { input: number; output: number } }> {
-  const genAI = getGeminiClient();
-  const geminiModel = genAI.getGenerativeModel({
-    model,
-    generationConfig: {
+  const apiKey = process.env.NEBIUS_API_KEY;
+  if (!apiKey) throw new Error("NEBIUS_API_KEY is not set");
+
+  const response = await fetch(`${NEBIUS_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: NEBIUS_MODEL,
+      messages: [
+        ...(options?.systemPrompt ? [{ role: "system", content: options.systemPrompt }] : []),
+        { role: "user", content: prompt },
+      ],
       temperature: options?.temperature ?? 0.7,
-      maxOutputTokens: options?.maxTokens ?? 2048,
-    },
+      max_tokens: options?.maxTokens ?? 2048,
+    }),
+    signal: AbortSignal.timeout(60_000),
   });
 
-  const fullPrompt = options?.systemPrompt
-    ? `${options.systemPrompt}\n\n${prompt}`
-    : prompt;
-
-  const result = await geminiModel.generateContent(fullPrompt);
-  const response = result.response;
-  const text = response.text();
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Nebius 驗證失敗：請更新伺服器端的 NEBIUS_API_KEY 後再試");
+    }
+    throw new Error(`Nebius inference failed (${response.status})`);
+  }
+  const body = await response.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+  const text = body.choices?.[0]?.message?.content;
+  if (!text?.trim()) throw new Error("Nebius returned an empty response");
 
   return {
     text,
-    model,
+    model: NEBIUS_MODEL,
     usage: {
-      input: response.usageMetadata?.promptTokenCount ?? 0,
-      output: response.usageMetadata?.candidatesTokenCount ?? 0,
-    },
-  };
-}
-
-// OpenAI API 調用
-async function callOpenAI(
-  model: string,
-  prompt: string,
-  options?: {
-    systemPrompt?: string;
-    temperature?: number;
-    maxTokens?: number;
-    json?: boolean;
-  }
-): Promise<{ text: string; model: string; usage?: { input: number; output: number } }> {
-  const { client: openai, provider } = getOpenAIClient();
-  const resolvedModel = provider === "nebius"
-    ? process.env.NEBIUS_MODEL ?? "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"
-    : model;
-
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-
-  if (options?.systemPrompt) {
-    messages.push({ role: "system", content: options.systemPrompt });
-  }
-
-  messages.push({ role: "user", content: prompt });
-
-  const response = await openai.chat.completions.create({
-    model: resolvedModel,
-    messages,
-    temperature: options?.temperature ?? 0.7,
-    max_tokens: options?.maxTokens ?? 2048,
-    // JSON mode 只在 OpenAI 上啟用；其他相容端點不一定支援
-    ...(options?.json && provider === "openai" ? { response_format: { type: "json_object" as const } } : {}),
-  });
-
-  const choice = response.choices[0];
-  const text = choice?.message?.content ?? "";
-  if (choice?.finish_reason === "length") {
-    console.warn(`[aiGateway] ${resolvedModel} output truncated at max_tokens`);
-  }
-
-  return {
-    text,
-    model: resolvedModel,
-    usage: {
-      input: response.usage?.prompt_tokens ?? 0,
-      output: response.usage?.completion_tokens ?? 0,
+      input: body.usage?.prompt_tokens ?? 0,
+      output: body.usage?.completion_tokens ?? 0,
     },
   };
 }
@@ -323,6 +238,7 @@ export async function customizeResume(
   additionalContext?: string
 ): Promise<{
   customizedContent: string;
+  baseAtsScore: number;
   atsScore: number;
   matchedKeywords: string[];
   missingKeywords: string[];
@@ -355,6 +271,7 @@ ${additionalContext ? `\n## 使用者補充的真實經驗（只能在內容有�
 請返回 JSON 格式：
 {
   "customizedContent": "完整的客製化履歷純文字內容（使用 Markdown 格式）",
+  "baseAtsScore": 0-100 的整數分數（基礎履歷直接對照此 JD 的預估適配分數）,
   "atsScore": 0-100 的整數分數（預估 ATS 通過率）,
   "matchedKeywords": ["已匹配的關鍵字1", "關鍵字2"],
   "missingKeywords": ["建議補充的關鍵字1", "關鍵字2"],
@@ -390,6 +307,7 @@ ${additionalContext ? `\n## 使用者補充的真實經驗（只能在內容有�
   }
   return {
     customizedContent: content,
+    baseAtsScore: Math.max(0, Math.min(100, Number(parsed.baseAtsScore) || 0)),
     atsScore: Math.max(0, Math.min(100, Number(parsed.atsScore) || 0)),
     matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords as string[] : [],
     missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords as string[] : [],
@@ -408,7 +326,7 @@ export type ResumeAudit = {
 export async function reviewResumeClaims(baseResume: string, draft: string, jobDescription: string, requirements: ResumeAudit["requirements"] = []): Promise<ResumeAudit> {
   const result = await aiGateway("resume_customization", `基礎履歷：\n${baseResume}\n\n客製草稿：\n${draft}\n\nJD：\n${jobDescription}\n\n條件分析：${JSON.stringify(requirements)}`, {
     systemPrompt: `你是獨立履歷事實審核員，與改寫者分開審核。逐項檢查草稿中的具體事實與責任強度是否能由基礎履歷支持。只將清楚可對照的原文放入 evidence；不能支持的數字、成果、技能、責任或資格標為 unsupported；原文被升級為更大責任或成果標為 exaggerated。通用自我描述不必列。status 有任何 exaggerated/unsupported 即 needs_attention。回傳純 JSON：{"status":"passed|needs_attention","summary":"...","findings":[{"claim":"草稿原句","status":"supported|exaggerated|unsupported","evidence":"基礎履歷原文或空字串","reason":"原因"}],"requirements":[{"requirement":"...","priority":"required|preferred","evidence":"...","status":"supported|partial|missing"}]}`,
-    temperature: 0.1, maxTokens: 3000, json: true,
+    temperature: 0.1, maxTokens: 3000,
   });
   const parsed = parseJsonResponse<ResumeAudit>(result.text);
   if (!Array.isArray(parsed.findings) || !["passed", "needs_attention"].includes(parsed.status)) throw new Error("事實審核格式無效");

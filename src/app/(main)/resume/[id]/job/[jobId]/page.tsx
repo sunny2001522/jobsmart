@@ -19,7 +19,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useResumeVersion, useVersionJobs } from "@/hooks";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 import type { VersionJobResumeWithDetails } from "@/types";
 
 interface ComparePageProps {

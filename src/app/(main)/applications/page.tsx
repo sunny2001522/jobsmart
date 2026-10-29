@@ -24,9 +24,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Loader2, Eye, EyeOff, Sparkles, MoreHorizontal, Trash2, ExternalLink, Save, Search, X, Check, FileText, BriefcaseBusiness, Heart, BookmarkCheck, Send, CircleHelp } from "lucide-react";
-import { toast } from "sonner";
+import { localizedToast as toast } from "@/lib/i18n/toast";
 import { AddApplicationDialog } from "@/components/kanban/add-application-dialog";
 import { JobCategoryTabs } from "@/components/job-category-tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -109,6 +119,7 @@ export default function ApplicationsPage() {
   const [prepared, setPrepared] = useState<{ applicationId: string; relationId: string; versionId: string; versionName: string; customizedContent: string; atsScore: number; matchedKeywords: string[]; missingKeywords: string[]; suggestions: string[]; audit: { status: "passed" | "needs_attention"; summary: string; findings: Array<{ claim: string; status: string; evidence: string; reason: string }>; requirements: Array<{ requirement: string; priority: string; evidence: string; status: string }> } } | null>(null);
   const [draftContent, setDraftContent] = useState("");
   const [preparingApplicationIds, setPreparingApplicationIds] = useState<Set<string>>(new Set());
+  const [isAppliedConfirmOpen, setIsAppliedConfirmOpen] = useState(false);
 
   const { selectedCategoryId } = useJobCategoryContext();
   const isMobile = useIsMobile();
@@ -302,13 +313,17 @@ export default function ApplicationsPage() {
     } catch (error) { toast.error(error instanceof Error ? error.message : "儲存失敗"); }
     finally { setSavingDraft(false); }
   };
-  const markAsApplied = async () => {
-    if (!prepared || !window.confirm("確認你已在 LinkedIn 檢查資料並親自送出申請？")) return;
+  const markAsApplied = () => {
+    if (prepared) setIsAppliedConfirmOpen(true);
+  };
+  const confirmMarkAsApplied = async () => {
+    if (!prepared) return;
     try {
       const updated = await updateJobApplication(prepared.applicationId, { status: "applied", applied_at: new Date().toISOString() });
       if (!updated) throw new Error("狀態更新失敗");
       setApplications((previous) => previous.map((application) => application.id === updated.id ? updated : application));
       toast.success("已更新為已投遞");
+      setIsAppliedConfirmOpen(false);
       setActiveLead(null);
       setPrepared(null);
     } catch (error) { toast.error(error instanceof Error ? error.message : "更新失敗"); }
@@ -342,7 +357,7 @@ export default function ApplicationsPage() {
         setApplications((previous) => previous.map((item) => item.id === application.id ? result.data.application : item));
       }
       if (!response.ok) throw new Error(result.error || "履歷準備失敗");
-      toast.success(`已使用「${version.name}」建立客製履歷，請審核`, { id: toastId });
+      toast.success("客製履歷已建立，請逐項審核", { id: toastId });
       // 直接開啟審核視窗，讓使用者檢查草稿後前往職缺頁送出
       setActiveLead({ id: application.id, company: application.company_name, role: application.position, url: application.jd_url || "", source: "tracking", status: "prepared", snippet: result.data.jdContent });
       setJdDraft(result.data.jdContent);
@@ -370,6 +385,14 @@ export default function ApplicationsPage() {
     }
   };
   const handleStatusChange = async (applicationId: string, newStatus: ApplicationStatus) => {
+    const application = applications.find((item) => item.id === applicationId);
+    // Dropping a wishlist card into "Preparing" is the same explicit action
+    // as pressing the card's Prepare resume button: generate both artifacts.
+    if (application?.status === "wishlist" && newStatus === "editing") {
+      await approveApplication(application);
+      return;
+    }
+
     // 樂觀更新 UI
     setApplications((prev) =>
       prev.map((app) =>
@@ -585,13 +608,13 @@ export default function ApplicationsPage() {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden">
+        <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {!isMobile && <SidebarTrigger className="-ml-1" />}
             <h1 className="shrink-0 text-2xl font-bold">求職追蹤</h1>
           </div>
-          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
             <JobCategoryTabs className="h-8 shrink-0" showStats stats={categoryStats} totalCount={applications.length} />
             <Button data-tour="ai-search" size="sm" className="px-2 sm:px-3" onClick={runAutomation} disabled={automationRunning} aria-label={automationRunning ? "搜尋中" : "AI 找職缺"} title={automationRunning ? "搜尋中" : "AI 找職缺"}><Sparkles className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">{automationRunning ? "搜尋中" : "AI 找職缺"}</span></Button>
             <label className="relative hidden md:block"><span className="sr-only">搜尋公司或職稱</span><Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋公司或職稱" className="h-9 w-64 pl-8 pr-8" />{searchQuery && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="清除搜尋" onClick={() => setSearchQuery("")}><X className="h-3.5 w-3.5" /></button>}</label>
@@ -707,6 +730,23 @@ export default function ApplicationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isAppliedConfirmOpen} onOpenChange={setIsAppliedConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{locale === "en" ? "Confirm application submitted" : "確認已送出申請"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {locale === "en"
+                ? "Confirm that you reviewed the details on LinkedIn and submitted the application yourself?"
+                : "確認你已在 LinkedIn 檢查資料並親自送出申請？"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{locale === "en" ? "Cancel" : "取消"}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmMarkAsApplied}>{locale === "en" ? "Confirm" : "確認"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <SpotlightTour steps={tourCopy.steps} labels={tourCopy.labels} open={tour.open} onClose={tour.close} />
 
