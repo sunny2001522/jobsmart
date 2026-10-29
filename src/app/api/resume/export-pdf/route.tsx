@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
+import { createElement } from "react";
 import { ResumeTemplate } from "@/lib/pdf/resume-template";
 import { z } from "zod";
 
 const exportSchema = z.object({
-  content: z.record(z.string(), z.unknown()),
+  content: z.union([z.record(z.string(), z.unknown()), z.string()]),
   title: z.string().optional(),
 });
 
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     const { content, title } = exportSchema.parse(body);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfBuffer = await renderToBuffer(<ResumeTemplate content={content as any} title={title} />);
+    const pdfBuffer = await renderToBuffer(createElement(ResumeTemplate, { content: content as any, title }));
 
     const filename = title ? `${title}.pdf` : "resume.pdf";
 

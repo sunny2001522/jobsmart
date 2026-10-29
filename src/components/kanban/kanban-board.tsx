@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { KanbanColumn } from "./kanban-column";
@@ -21,6 +22,7 @@ interface KanbanBoardProps {
 
 export function KanbanBoard({ applications, showSummaries = true, onApplicationUpdate, onAddClick, onApproveApplication, firstColumnContent }: KanbanBoardProps) {
   const isMobile = useIsMobile();
+  const searchParams = useSearchParams();
   const { locale } = useI18n();
   const englishStatusLabels: Record<ApplicationStatus, string> = {
     wishlist: "Saved",
@@ -41,6 +43,14 @@ export function KanbanBoard({ applications, showSummaries = true, onApplicationU
   };
   const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const jobId = searchParams.get("job");
+    const target = jobId ? applications.find((application) => application.id === jobId) : null;
+    if (!target) return;
+    setSelectedApplication(target);
+    if (isMobile) setIsDrawerOpen(true);
+  }, [applications, isMobile, searchParams]);
 
   useEffect(() => {
     if (isMobile || !selectedApplication) return;

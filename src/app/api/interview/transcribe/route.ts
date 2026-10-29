@@ -5,13 +5,15 @@ import { NextRequest, NextResponse } from "next/server";
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+  let en = false;
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File | null;
+    en = formData.get("locale") === "en";
 
     if (!audioFile) {
       return NextResponse.json(
-        { success: false, error: "請提供音訊檔案" },
+        { success: false, error: en ? "Please provide an audio recording." : "請提供音訊檔案" },
         { status: 400 }
       );
     }
@@ -19,7 +21,7 @@ export async function POST(request: NextRequest) {
     // 檢查檔案大小
     if (audioFile.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { success: false, error: "檔案大小超過 25MB 限制" },
+        { success: false, error: en ? "The audio file exceeds the 25 MB limit." : "檔案大小超過 25MB 限制" },
         { status: 400 }
       );
     }
@@ -27,7 +29,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.NEBIUS_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: "Nebius API 未設定" },
+        { success: false, error: en ? "The speech transcription service is not configured." : "Nebius API 未設定" },
         { status: 500 }
       );
     }
@@ -36,7 +38,7 @@ export async function POST(request: NextRequest) {
     const payload = new FormData();
     payload.set("file", audioFile);
     payload.set("model", process.env.NEBIUS_TRANSCRIPTION_MODEL ?? "openai/whisper-large-v3-turbo");
-    payload.set("language", "zh");
+    payload.set("language", en ? "en" : "zh");
     payload.set("response_format", "json");
 
     const response = await fetch(`${baseUrl}/audio/transcriptions`, {
@@ -62,14 +64,14 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error) {
       if (error.message.includes("Invalid file format")) {
         return NextResponse.json(
-          { success: false, error: "不支援的音訊格式" },
+          { success: false, error: en ? "Unsupported audio format." : "不支援的音訊格式" },
           { status: 400 }
         );
       }
     }
 
     return NextResponse.json(
-      { success: false, error: "語音轉文字失敗，請稍後再試" },
+      { success: false, error: en ? "Speech transcription failed. Please try again." : "語音轉文字失敗，請稍後再試" },
       { status: 500 }
     );
   }

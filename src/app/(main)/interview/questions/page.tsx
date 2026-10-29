@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,9 +23,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Play, Bookmark } from "lucide-react";
-import { getInterviewQuestions } from "@/lib/turso/db";
+import { Plus, Search, Bookmark, ChevronDown, MessageSquareText } from "lucide-react";
+import { createInterviewQuestion, getInterviewAnswers, getInterviewQuestions } from "@/lib/turso/db";
+import type { InterviewAnswer } from "@/lib/turso/types";
 import { useI18n } from "@/contexts/i18n-context";
+import { localizedToast as toast } from "@/lib/i18n/toast";
+import { containsCjk, getDefaultInterviewQuestions, isTextInInterviewLocale, type InterviewLocale } from "@/lib/interview/question-utils";
 
 type QuestionCategory =
   | "behavioral"
@@ -41,6 +43,10 @@ interface InterviewQuestion {
   category: QuestionCategory;
   difficulty: "easy" | "medium" | "hard";
   isBookmarked: boolean;
+  company_name?: string | null;
+  origin?: "company_review" | "resume_followup" | "custom" | "default";
+  evidence?: Array<{ reviewId: string; quote: string }>;
+  source_urls?: string[];
 }
 
 const categoryLabels: Record<QuestionCategory, { zh: string; en: string }> = {
@@ -53,97 +59,12 @@ const categoryLabels: Record<QuestionCategory, { zh: string; en: string }> = {
 
 const difficultyLabels = { easy: { zh: "簡單", en: "Easy" }, medium: { zh: "中等", en: "Medium" }, hard: { zh: "困難", en: "Hard" } };
 
-// 預設題庫
-const defaultQuestions: InterviewQuestion[] = [
-  {
-    id: "1",
-    question: "請簡單自我介紹",
-    category: "self_introduction",
-    difficulty: "easy",
-    isBookmarked: false,
-  },
-  {
-    id: "2",
-    question: "為什麼想加入我們公司？",
-    category: "behavioral",
-    difficulty: "easy",
-    isBookmarked: false,
-  },
-  {
-    id: "3",
-    question: "描述一個你克服困難的經歷",
-    category: "behavioral",
-    difficulty: "medium",
-    isBookmarked: false,
-  },
-  {
-    id: "4",
-    question: "你的優點和缺點是什麼？",
-    category: "behavioral",
-    difficulty: "easy",
-    isBookmarked: false,
-  },
-  {
-    id: "5",
-    question: "描述一個你與團隊成員意見不合的情況，你如何處理？",
-    category: "situational",
-    difficulty: "medium",
-    isBookmarked: false,
-  },
-  {
-    id: "6",
-    question: "你如何處理工作壓力？",
-    category: "behavioral",
-    difficulty: "easy",
-    isBookmarked: false,
-  },
-  {
-    id: "7",
-    question: "描述一個你領導專案的經驗",
-    category: "behavioral",
-    difficulty: "hard",
-    isBookmarked: false,
-  },
-  {
-    id: "8",
-    question: "你未來五年的職涯規劃是什麼？",
-    category: "behavioral",
-    difficulty: "medium",
-    isBookmarked: false,
-  },
-  {
-    id: "9",
-    question: "如果主管給你一個不合理的截止日期，你會怎麼做？",
-    category: "situational",
-    difficulty: "hard",
-    isBookmarked: false,
-  },
-  {
-    id: "10",
-    question: "描述一個你失敗的經驗，你從中學到什麼？",
-    category: "behavioral",
-    difficulty: "medium",
-    isBookmarked: false,
-  },
-];
-
-const englishQuestions = [
-  "Tell me about yourself.",
-  "Why do you want to join our company?",
-  "Describe a time you overcame a challenge.",
-  "What are your strengths and weaknesses?",
-  "Describe a disagreement with a teammate and how you handled it.",
-  "How do you handle work-related stress?",
-  "Describe a project you led.",
-  "Where do you see your career in five years?",
-  "What would you do if your manager gave you an unrealistic deadline?",
-  "Describe a failure and what you learned from it.",
-];
-
 export default function QuestionsPage() {
   const { locale } = useI18n();
   const en = locale === "en";
-  const [questions, setQuestions] = useState<InterviewQuestion[]>(defaultQuestions);
+  const questionLocale = (en ? "en" : "zh-TW") as InterviewLocale;
+  const [questions, setQuestions] = useState<InterviewQuestion[]>([]);
+  const [answersByQuestion, setAnswersByQuestion] = useState<Record<string, InterviewAnswer | null>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -155,9 +76,14 @@ export default function QuestionsPage() {
 
   useEffect(() => {
     let active = true;
-    getInterviewQuestions().then((stored) => {
-      if (!active || !stored?.length) return;
-      const imported = stored.map((item) => ({
+    const defaults: InterviewQuestion[] = getDefaultInterviewQuestions(questionLocale).map((item) => ({
+      ...item,
+      isBookmarked: false,
+    }));
+    setQuestions(defaults);
+    getInterviewQuestions({ locale: questionLocale }).then((stored) => {
+      if (!active) return;
+      const imported = (stored ?? []).filter((item) => isTextInInterviewLocale(item.question, questionLocale)).map((item) => ({
         id: item.id,
         question: item.question,
         category: (["behavioral", "technical", "situational", "self_introduction", "other"] as string[]).includes(item.category || "")
@@ -165,14 +91,43 @@ export default function QuestionsPage() {
           : "other" as QuestionCategory,
         difficulty: (item.difficulty === "easy" || item.difficulty === "hard" ? item.difficulty : "medium") as "easy" | "medium" | "hard",
         isBookmarked: false,
+        company_name: item.company_name,
+        origin: item.origin,
+        evidence: item.evidence,
+        source_urls: item.source_urls,
       }));
       setQuestions((current) => {
-        const existing = new Set(current.map((question) => question.question));
-        return [...imported.filter((question) => !existing.has(question.question)), ...current];
+        const existing = new Set(current.map((question) => question.question.trim().toLocaleLowerCase()));
+        const importedUnique = imported.filter((question) => {
+          const key = question.question.trim().toLocaleLowerCase();
+          if (existing.has(key)) return false;
+          existing.add(key);
+          return true;
+        });
+        return [...importedUnique, ...current];
       });
     }).catch(() => undefined);
     return () => { active = false; };
-  }, []);
+  }, [questionLocale]);
+
+  useEffect(() => {
+    let active = true;
+    getInterviewAnswers()
+      .then((answers) => {
+        if (!active) return;
+        const latestByQuestion: Record<string, InterviewAnswer> = {};
+        for (const answer of answers ?? []) {
+          if (en && containsCjk(answer.transcript)) continue;
+          const current = latestByQuestion[answer.question_id];
+          if (!current || new Date(answer.created_at).getTime() > new Date(current.created_at).getTime()) {
+            latestByQuestion[answer.question_id] = answer;
+          }
+        }
+        setAnswersByQuestion(latestByQuestion);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [en]);
 
   const filteredQuestions = questions.filter((q) => {
     const matchesSearch = q.question.toLowerCase().includes(searchQuery.toLowerCase());
@@ -180,20 +135,40 @@ export default function QuestionsPage() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleAddQuestion = () => {
-    if (!newQuestion.question.trim()) return;
-
-    const question: InterviewQuestion = {
-      id: crypto.randomUUID(),
-      question: newQuestion.question,
-      category: newQuestion.category,
-      difficulty: newQuestion.difficulty,
-      isBookmarked: false,
-    };
-
-    setQuestions([question, ...questions]);
-    setNewQuestion({ question: "", category: "behavioral", difficulty: "medium" });
-    setIsAddDialogOpen(false);
+  const handleAddQuestion = async () => {
+    const questionText = newQuestion.question.trim();
+    if (!questionText) return;
+    if (!isTextInInterviewLocale(questionText, questionLocale)) {
+      toast.error(en ? "Enter the question in English to match the current language." : "請使用目前介面語言輸入題目");
+      return;
+    }
+    try {
+      const saved = await createInterviewQuestion({
+        question: questionText,
+        category: newQuestion.category,
+        difficulty: newQuestion.difficulty,
+        company_id: null,
+        is_public: false,
+        locale: questionLocale,
+        origin: "custom",
+      });
+      if (!saved) throw new Error("Question was not saved");
+      setQuestions((current) => [{
+        id: saved.id,
+        question: saved.question,
+        category: (saved.category || "other") as QuestionCategory,
+        difficulty: (saved.difficulty || "medium") as "easy" | "medium" | "hard",
+        isBookmarked: false,
+        company_name: saved.company_name,
+        origin: saved.origin,
+        evidence: saved.evidence,
+        source_urls: saved.source_urls,
+      }, ...current]);
+      setNewQuestion({ question: "", category: "behavioral", difficulty: "medium" });
+      setIsAddDialogOpen(false);
+    } catch {
+      toast.error(en ? "Could not save the question. Please try again." : "題目儲存失敗，請稍後再試");
+    }
   };
 
   const toggleBookmark = (id: string) => {
@@ -245,9 +220,9 @@ export default function QuestionsPage() {
 
       {/* 題目列表 */}
       <Tabs defaultValue="all">
-        <TabsList>
-          <TabsTrigger value="all">{en ? "All" : "全部"} ({questions.length})</TabsTrigger>
-          <TabsTrigger value="bookmarked">
+        <TabsList className="w-full sm:w-fit">
+          <TabsTrigger value="all" className="min-w-0 flex-1 px-3 sm:flex-none sm:px-4">{en ? "All" : "全部"} ({questions.length})</TabsTrigger>
+          <TabsTrigger value="bookmarked" className="min-w-0 flex-1 px-3 sm:flex-none sm:px-4">
             {en ? "Bookmarked" : "已收藏"} ({questions.filter((q) => q.isBookmarked).length})
           </TabsTrigger>
         </TabsList>
@@ -257,9 +232,11 @@ export default function QuestionsPage() {
             {filteredQuestions.map((question) => (
               <QuestionCard
                 key={question.id}
-                question={locale === "en" && /^([1-9]|10)$/.test(question.id) ? { ...question, question: englishQuestions[Number(question.id) - 1] } : question}
+                question={question}
                 onToggleBookmark={toggleBookmark}
                 locale={locale}
+                savedAnswer={answersByQuestion[question.id] ?? null}
+                onAnswerSaved={(answer) => setAnswersByQuestion((current) => ({ ...current, [question.id]: answer }))}
               />
             ))}
             {filteredQuestions.length === 0 && (
@@ -279,9 +256,11 @@ export default function QuestionsPage() {
               .map((question) => (
                 <QuestionCard
                   key={question.id}
-                  question={locale === "en" && /^([1-9]|10)$/.test(question.id) ? { ...question, question: englishQuestions[Number(question.id) - 1] } : question}
+                  question={question}
                   onToggleBookmark={toggleBookmark}
                   locale={locale}
+                  savedAnswer={answersByQuestion[question.id] ?? null}
+                  onAnswerSaved={(answer) => setAnswersByQuestion((current) => ({ ...current, [question.id]: answer }))}
                 />
               ))}
             {questions.filter((q) => q.isBookmarked).length === 0 && (
@@ -380,12 +359,52 @@ function QuestionCard({
   question,
   onToggleBookmark,
   locale,
+  savedAnswer,
+  onAnswerSaved,
 }: {
   question: InterviewQuestion;
   onToggleBookmark: (id: string) => void;
   locale: "en" | "zh-TW";
+  savedAnswer: InterviewAnswer | null;
+  onAnswerSaved: (answer: InterviewAnswer) => void;
 }) {
   const en = locale === "en";
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [answerText, setAnswerText] = useState("");
+  const [isSavingAnswer, setIsSavingAnswer] = useState(false);
+  const [answerError, setAnswerError] = useState<string | null>(null);
+
+  const saveAnswer = async () => {
+    if (answerText.trim().length < 20) {
+      setAnswerError(en ? "Please write at least 20 characters." : "請至少輸入 20 個字元。" );
+      return;
+    }
+    setIsSavingAnswer(true);
+    setAnswerError(null);
+    try {
+      const response = await fetch("/api/interview/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: question.question,
+          answer: answerText,
+          questionId: question.id,
+          locale,
+          durationSeconds: null,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || (en ? "Could not save your answer." : "回答儲存失敗"));
+      const answers = await getInterviewAnswers(question.id);
+      const latest = answers.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+      if (latest) onAnswerSaved(latest);
+    } catch (error) {
+      setAnswerError(error instanceof Error ? error.message : (en ? "Could not save your answer." : "回答儲存失敗"));
+    } finally {
+      setIsSavingAnswer(false);
+    }
+  };
+
   return (
     <Card>
       <CardContent className="p-4">
@@ -406,6 +425,9 @@ function QuestionCard({
               >
                 {difficultyLabels[question.difficulty][en ? "en" : "zh"]}
               </Badge>
+              {question.company_name && <Badge variant="outline">{en && containsCjk(question.company_name) ? ("Company interview" as const) : question.company_name}</Badge>}
+              {question.origin === "company_review" && <Badge variant="outline">{en ? "From interview reviews" : "來自面試評論"}</Badge>}
+              {question.origin === "resume_followup" && <Badge variant="outline">{en ? "Resume follow-up" : "履歷追問"}</Badge>}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -420,14 +442,77 @@ function QuestionCard({
                 }`}
               />
             </Button>
-            <Button asChild size="sm">
-              <Link href={`/interview/practice?q=${question.id}`}>
-                <Play className="h-4 w-4 mr-2" />
-                {en ? "Practice" : "練習"}
-              </Link>
-            </Button>
           </div>
         </div>
+        <button
+          type="button"
+          className="mt-4 flex w-full items-center justify-between border-t pt-3 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded((expanded) => !expanded)}
+        >
+          <span className="flex items-center gap-2">
+            <MessageSquareText className="h-4 w-4" />
+            {savedAnswer
+              ? (en ? "View saved answer" : "查看已儲存回答")
+              : (en ? "View answer area" : "查看回答區")}
+          </span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+        </button>
+        {isExpanded && question.evidence?.length ? (
+          <div className="mt-3 space-y-2 border-t pt-3">
+            <p className="text-sm font-medium">{en ? "Review evidence" : "評論依據"}</p>
+            {question.evidence.map((item, index) => (
+              <blockquote key={`${item.reviewId}-${index}`} className="border-l-2 pl-3 text-sm text-muted-foreground">
+                {en && containsCjk(item.quote)
+                  ? "The source quote is in its original language. Use the source link below to review it."
+                  : `“${item.quote}”`}
+              </blockquote>
+            ))}
+            {question.source_urls?.map((url) => (
+              <a key={url} href={url} target="_blank" rel="noreferrer" className="block break-all text-xs text-primary underline">
+                {url}
+              </a>
+            ))}
+          </div>
+        ) : null}
+        {isExpanded && (
+          <div className="mt-3 rounded-md bg-muted/50 p-4">
+            {savedAnswer ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium">{en ? "Your saved answer" : "你的已儲存回答"}</p>
+                  {savedAnswer.ai_score !== null && (
+                    <Badge variant="outline">
+                      {en ? "Score" : "分數"}: {savedAnswer.ai_score}/100
+                    </Badge>
+                  )}
+                </div>
+                <p className="whitespace-pre-wrap text-sm leading-6">{savedAnswer.transcript}</p>
+                <p className="text-xs text-muted-foreground">
+                  {en ? "Saved " : "儲存於 "}{new Date(savedAnswer.created_at).toLocaleString(en ? "en-US" : "zh-TW")}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {en ? "You have not saved an answer for this question yet." : "這題目前還沒有儲存的回答。"}
+                </p>
+                <Textarea
+                  value={answerText}
+                  onChange={(event) => setAnswerText(event.target.value)}
+                  rows={7}
+                  placeholder={en ? "Type your answer in plain text..." : "請以純文字輸入你的回答..."}
+                />
+                {answerError && <p className="text-sm text-destructive">{answerError}</p>}
+                <div className="flex justify-end">
+                  <Button type="button" onClick={saveAnswer} disabled={isSavingAnswer || !answerText.trim()}>
+                    {isSavingAnswer ? (en ? "Saving and scoring..." : "儲存並評分中...") : (en ? "Save and get AI feedback" : "儲存並取得 AI 評分")}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

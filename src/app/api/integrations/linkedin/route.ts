@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
+import { getLocalUser } from "@/lib/auth/local";
 import { ensureTursoSchema, getTursoClient } from "@/lib/turso/server";
 
+// Legacy status endpoint. LinkedIn cannot be connected through the official
+// API here; report only the user's actual Chrome Companion pairing state.
 export async function GET() {
-  const db = getTursoClient(); if (!db) return NextResponse.json({ error: "Turso is not configured" }, { status: 503 });
-  await ensureTursoSchema(); const r = await db.execute({ sql: "SELECT * FROM external_connections WHERE user_id = ? AND provider = ?", args: ["demo-user", "linkedin"] });
-  return NextResponse.json({ data: r.rows[0] || { provider: "linkedin", status: "disconnected", account_label: null } });
+  const user = await getLocalUser();
+  if (!user) return NextResponse.json({ error: "請先登入" }, { status: 401 });
+  const db = getTursoClient();
+  if (!db) return NextResponse.json({ error: "Turso is not configured" }, { status: 503 });
+  await ensureTursoSchema();
+  const result = await db.execute({
+    sql: "SELECT MAX(created_at) AS connected_at FROM linkedin_companion_tokens WHERE user_id = ? AND revoked_at IS NULL",
+    args: [user.id],
+  });
+  const connectedAt = result.rows[0]?.connected_at ?? null;
+  return NextResponse.json({ data: { provider: "linkedin", status: connectedAt ? "connected" : "disconnected", connectedAt } });
 }
 
-export async function POST(request: Request) {
-  const body = await request.json(); const status = body.status === "connected" ? "connected" : "disconnected";
-  const db = getTursoClient(); if (!db) return NextResponse.json({ error: "Turso is not configured" }, { status: 503 });
-  await ensureTursoSchema(); const now = new Date().toISOString();
-  await db.execute({ sql: "INSERT OR REPLACE INTO external_connections (user_id, provider, status, account_label, scopes_json, updated_at) VALUES (?, ?, ?, ?, ?, ?)", args: ["demo-user", "linkedin", status, body.accountLabel || null, JSON.stringify(status === "connected" ? ["profile:read", "job:review"] : []), now] });
-  return NextResponse.json({ data: { provider: "linkedin", status, accountLabel: body.accountLabel || null, updatedAt: now } });
+export async function POST() {
+  return NextResponse.json({
+    error: "LinkedIn OAuth 連線未提供。請使用 JobSmart LinkedIn Companion 配對外掛。",
+  }, { status: 410 });
 }

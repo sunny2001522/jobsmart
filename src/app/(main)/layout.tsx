@@ -8,6 +8,7 @@ import { MobileTabBar } from "@/components/mobile-navigation";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "@/components/brand-logo";
 
 export default function MainLayout({
   children,
@@ -25,10 +26,7 @@ export default function MainLayout({
           <div className="flex h-svh min-w-0 flex-col overflow-hidden">
             {/* 頂部 Header（精簡版） */}
             <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-                J
-              </div>
-              <span className="ml-2 min-w-0 flex-1 truncate font-semibold">JobSmart</span>
+              <BrandLogo className="h-7 max-w-[142px] flex-1 object-left" />
               <LanguageSwitcher className="h-8 w-10 shrink-0 px-2 sm:w-[130px] sm:px-3" compactOnMobile />
             </header>
 

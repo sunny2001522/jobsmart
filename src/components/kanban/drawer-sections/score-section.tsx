@@ -4,14 +4,15 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Info,
-  Star,
   Settings,
   Heart,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { ValueRanking, CompanyReview, ValueVerdict } from "@/types";
+import type { ValueRanking, ValueVerdict } from "@/types";
 import { useI18n } from "@/contexts/i18n-context";
 import { getCompleteValueRanking } from "@/lib/values/matcher";
+import { calculateWeightedMatchScore } from "@/lib/values/matcher";
+import { formatCompanyTier, getCompanyTier } from "@/lib/company-tier";
 import type { ValueMatchResult } from "@/lib/values/matcher";
 export type { ValueMatchResult };
 
@@ -40,9 +41,9 @@ const ALL_VALUES = [
 ];
 
 interface ScoreSectionProps {
+  companyName: string;
   matchResult: ValueMatchResult | null;
   userRanking: ValueRanking | null;
-  reviews: CompanyReview[];
   isLoading?: boolean;
   onRefreshScore?: () => Promise<void>;
   isRefreshingScore?: boolean;
@@ -66,9 +67,9 @@ const getSortedValues = (userRanking: ValueRanking | null) => {
 };
 
 export function ScoreSection({
+  companyName,
   matchResult,
   userRanking,
-  reviews,
   isLoading,
   onRefreshScore,
   isRefreshingScore = false,
@@ -86,11 +87,14 @@ export function ScoreSection({
   }
 
   const hasRanking = Boolean(userRanking?.full_ranking?.length || userRanking?.top_values?.length);
-  const hasMatchResult = matchResult && matchResult.breakdown.length > 0;
-  const companyRating = reviews.length > 0
-    ? Math.max(1, Math.min(10, Math.round(reviews.reduce((total, review) => total + (review.sentiment_score ?? (review.sentiment === "positive" ? 85 : review.sentiment === "negative" ? 25 : 55)), 0) / reviews.length / 10)))
-    : null;
-
+  const hasMatchResult = Boolean(matchResult?.breakdown.some((item) =>
+    item.quality !== "unknown" || (manualVerdicts[item.valueId] && manualVerdicts[item.valueId] !== "unknown")
+  ));
+  const companyTier = getCompanyTier(companyName);
+  const displayMatchScore = matchResult
+    ? calculateWeightedMatchScore(matchResult.breakdown, manualVerdicts)
+    : 0;
+  const heartCount = hasMatchResult ? Math.max(1, Math.ceil(displayMatchScore / 20)) : 0;
   // Get score for a value from matchResult
   const getValueBreakdown = (valueId: string) => {
     return matchResult?.breakdown.find((item) => item.valueId === valueId);
@@ -111,19 +115,25 @@ export function ScoreSection({
             onClick={() => void onRefreshScore()}
             disabled={isRefreshingScore}
           >
-            {isRefreshingScore ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />}
+            {isRefreshingScore ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <span className="text-xs">↓</span>}
             {isRefreshingScore ? (isEnglish ? "Calculating..." : "計算中...") : (isEnglish ? "Search & score" : "查詢並算分")}
           </Button>
         </div>
       )}
       <div className="grid gap-3 border-b pb-4 sm:grid-cols-2">
         <div className="flex items-center gap-3">
-          <Star className="h-6 w-6 fill-amber-400 text-amber-400" />
-          <div><p className="text-xs text-muted-foreground">{isEnglish ? "AI company rating (1–10)" : "AI 公司評價（1–10）"}</p><p className="text-3xl font-bold">{companyRating ?? "--"}<span className="text-sm font-normal text-muted-foreground"> / 10</span></p></div>
+          <div className="rounded-md border bg-muted px-2 py-1 text-sm font-semibold">{formatCompanyTier(companyTier.tier)}</div>
         </div>
         {hasRanking ? <div className="flex items-center gap-3">
           <Heart className="h-6 w-6 fill-rose-400 text-rose-400" />
-          <div><p className="text-xs text-muted-foreground">{isEnglish ? "Values match" : "價值觀匹配度"}</p><p className="text-3xl font-bold text-primary">{hasMatchResult ? matchResult.matchScore : "--"}<span className="text-sm font-normal text-muted-foreground"> / 100</span></p></div>
+          <div>
+            <p className="text-xs text-muted-foreground">{isEnglish ? "Values match" : "價值觀匹配度"}</p>
+            <div className="flex items-center gap-0.5" aria-label={hasMatchResult ? `${heartCount} / 5` : undefined}>
+              {Array.from({ length: 5 }, (_, index) => (
+                <Heart key={index} className={`h-6 w-6 ${index < heartCount ? "fill-rose-400 text-rose-400" : "text-muted-foreground/30"}`} />
+              ))}
+            </div>
+          </div>
         </div> : <Link href="/values" className="flex items-center gap-2 rounded-lg border border-dashed p-2 text-xs text-muted-foreground hover:border-primary hover:text-primary"><Heart className="h-4 w-4" />{isEnglish ? "Complete the values cards for a personalized match score" : "完成價值觀卡牌以取得個人化匹配分數"}</Link>}
       </div>
 
@@ -139,7 +149,9 @@ export function ScoreSection({
         {getSortedValues(userRanking).map((value) => {
           const breakdown = getValueBreakdown(value.id);
           const detectedStatus = breakdown?.quality || "unknown";
-          const verdict = manualVerdicts[value.id] ?? (detectedStatus === "good" ? "positive" : detectedStatus === "bad" ? "negative" : detectedStatus === "okay" ? "neutral" : "unknown");
+          const verdict = manualVerdicts[value.id] ?? (value.id === "salary" && companyTier.tier === 1
+            ? "positive"
+            : detectedStatus === "good" ? "positive" : detectedStatus === "bad" ? "negative" : detectedStatus === "okay" ? "neutral" : "unknown");
 
           return (
             <div

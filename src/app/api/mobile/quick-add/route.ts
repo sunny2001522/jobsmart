@@ -24,15 +24,8 @@ import { classifyAndMatch } from "@/lib/ai/category-classifier";
 import { customizeResume } from "@/lib/ai/gateway";
 import { createJobApplicationDraft } from "@/lib/gmail/draft";
 import { isGmailConnected } from "@/lib/gmail/oauth";
-import {
-  createJobApplication,
-  getJobCategories,
-  getResumeVersions,
-  addJobToVersion,
-  updateVersionJobResume,
-  getVersionJobResume,
-  getProfile,
-} from "@/lib/turso/db";
+import { serverData } from "@/lib/turso/server-data";
+import type { JobApplication, JobCategory, Profile, ResumeVersion, VersionJobResume } from "@/lib/turso/types";
 import { extractJobTextFromHTML, normalizeJobList, normalizeJobText } from "@/lib/crawler/job-description";
 
 // 請求 schema
@@ -273,9 +266,9 @@ export async function POST(request: NextRequest) {
 
     // 4. 取得用戶的類別和履歷版本
     const [categories, versions, profile] = await Promise.all([
-      getJobCategories(),
-      getResumeVersions(),
-      getProfile(),
+      serverData<JobCategory[]>("getJobCategories"),
+      serverData<ResumeVersion[]>("getResumeVersions"),
+      serverData<Profile | null>("getProfile"),
     ]);
 
     // 5. AI 判斷類別並匹配履歷版本
@@ -293,7 +286,7 @@ export async function POST(request: NextRequest) {
     // 6. 建立 job_application
     // 注意: source_type 等欄位需要透過 Turso client 直接插入
     // 因為 JobApplicationInsert 類型尚未包含這些欄位
-    const jobApp = await createJobApplication({
+    const jobApp = await serverData<JobApplication | null>("createJobApplication", [{
       company_name: jobData.companyName,
       position: jobData.position,
       jd_url: jobData.sourceUrl,
@@ -327,7 +320,7 @@ export async function POST(request: NextRequest) {
       meal_allowance: 0,
       other_allowance: 0,
       value_scores: null,
-    } as Parameters<typeof createJobApplication>[0]);
+    }]);
 
     // 更新擴展欄位（透過 Turso 直接更新）
     if (jobApp) {
@@ -374,7 +367,7 @@ export async function POST(request: NextRequest) {
     if (autoCustomize && classification.resumeVersion.versionId) {
       try {
         // 將職缺添加到版本
-        await addJobToVersion(classification.resumeVersion.versionId, jobApp.id);
+        await serverData<VersionJobResume | null>("addJobToVersion", [classification.resumeVersion.versionId, jobApp.id]);
 
         // 取得版本的基礎履歷
         const version = versions.find(
@@ -390,12 +383,12 @@ export async function POST(request: NextRequest) {
           );
 
           // 更新 version_job_resume
-          const vjr = await getVersionJobResume(
+          const vjr = await serverData<VersionJobResume | null>("getVersionJobResume", [
             classification.resumeVersion.versionId,
-            jobApp.id
-          );
+            jobApp.id,
+          ]);
           if (vjr) {
-            await updateVersionJobResume(vjr.id, {
+            await serverData<VersionJobResume | null>("updateVersionJobResume", [vjr.id, {
               customized_plain_text: customization.customizedContent,
               ats_score: customization.atsScore,
               matched_keywords: customization.matchedKeywords,
@@ -403,7 +396,7 @@ export async function POST(request: NextRequest) {
               ai_suggestions: { suggestions: customization.suggestions },
               generation_status: "completed",
               generated_at: new Date().toISOString(),
-            });
+            }]);
           }
 
           customizedResume = {

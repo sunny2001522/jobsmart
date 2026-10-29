@@ -42,6 +42,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { GenerationStatus, JobApplication, VersionJobResume } from "@/types";
+import { getResumeLanguageLabel, inferResumeLanguageCode } from "@/lib/resume/languages";
 
 interface VersionWorkspacePageProps {
   params: Promise<{ id: string }>;
@@ -246,6 +247,7 @@ export default function VersionWorkspacePage({ params }: VersionWorkspacePagePro
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [removeJobId, setRemoveJobId] = useState<string | null>(null);
   const [generatingJobId, setGeneratingJobId] = useState<string | null>(null);
+  const [requiredAction, setRequiredAction] = useState<{ code: "missing_jd" | "missing_resume"; jobId: string } | null>(null);
 
   const handleAddJob = async (jobId: string) => {
     const result = await linkJob(jobId);
@@ -284,6 +286,10 @@ export default function VersionWorkspacePage({ params }: VersionWorkspacePagePro
 
       const data = await response.json();
 
+      if (data.code === "missing_jd" || data.code === "missing_resume") {
+        setRequiredAction({ code: data.code, jobId });
+        return;
+      }
       if (data.success) {
         toast.success("客製化履歷已生成");
         refresh();
@@ -299,14 +305,18 @@ export default function VersionWorkspacePage({ params }: VersionWorkspacePagePro
 
   const handleExportPDF = async () => {
     if (!version) return;
+    const baseLanguage = version.base_language || inferResumeLanguageCode(version.base_plain_text);
+    const activeLanguage = version.active_language || baseLanguage;
+    const activeVariant = version.language_variants?.find((variant) => variant.language_code === activeLanguage);
+    const activeContent = activeLanguage === baseLanguage ? version.base_content : activeVariant?.content || version.base_content;
 
     try {
       const response = await fetch("/api/resume/export-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: version.base_content,
-          title: version.name,
+          content: activeContent,
+          title: `${version.name} - ${getResumeLanguageLabel(activeLanguage)}`,
         }),
       });
 
@@ -316,7 +326,7 @@ export default function VersionWorkspacePage({ params }: VersionWorkspacePagePro
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${version.name}.pdf`;
+      a.download = `${version.name}_${activeLanguage}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -367,6 +377,10 @@ export default function VersionWorkspacePage({ params }: VersionWorkspacePagePro
   const linkedJobIds = new Set(
     version.version_job_resumes.map((vjr) => vjr.job_application_id)
   );
+  const baseLanguage = version.base_language || inferResumeLanguageCode(version.base_plain_text);
+  const activeLanguage = version.active_language || baseLanguage;
+  const activeVariant = version.language_variants?.find((variant) => variant.language_code === activeLanguage);
+  const activeResumeText = activeLanguage === baseLanguage ? version.base_plain_text : activeVariant?.plain_text || version.base_plain_text;
 
   return (
     <div className="space-y-6">
@@ -408,10 +422,10 @@ export default function VersionWorkspacePage({ params }: VersionWorkspacePagePro
             <CardContent>
               <div className="aspect-[1/1.4] bg-muted rounded-lg overflow-hidden border">
                 <div className="p-4 text-xs leading-relaxed overflow-hidden max-h-full">
-                  {version.base_plain_text ? (
+                  {activeResumeText ? (
                     <pre className="whitespace-pre-wrap font-sans">
-                      {version.base_plain_text.slice(0, 500)}
-                      {version.base_plain_text.length > 500 && "..."}
+                      {activeResumeText.slice(0, 500)}
+                      {activeResumeText.length > 500 && "..."}
                     </pre>
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -525,6 +539,30 @@ export default function VersionWorkspacePage({ params }: VersionWorkspacePagePro
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction onClick={handleRemoveJob}>移除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={requiredAction !== null} onOpenChange={(open) => !open && setRequiredAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{requiredAction?.code === "missing_jd" ? "請先補齊職缺描述" : "請先補齊原始履歷"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {requiredAction?.code === "missing_jd"
+                ? "客製化需要這個職缺的 JD 才能產生對應內容。"
+                : "客製化需要原始履歷作為唯一事實來源。"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>稍後再說</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              if (!requiredAction) return;
+              const destination = requiredAction.code === "missing_jd" ? `/applications?job=${requiredAction.jobId}` : `/resume/${id}/edit`;
+              setRequiredAction(null);
+              router.push(destination);
+            }}>
+              {requiredAction?.code === "missing_jd" ? "前往填寫 JD" : "前往編輯履歷"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

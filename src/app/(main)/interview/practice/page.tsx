@@ -1,110 +1,56 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Mic,
-  Square,
-  Pause,
-  Play,
-  RotateCcw,
-  Send,
-  Loader2,
-  ArrowLeft,
-  CheckCircle,
-  AlertCircle,
-  Lightbulb,
-} from "lucide-react";
-import { useAudioRecorder, formatRecordingTime } from "@/hooks/use-audio-recorder";
+import { RotateCcw, Send, Loader2, ArrowLeft, CheckCircle, AlertCircle, Lightbulb } from "lucide-react";
 import { useI18n } from "@/contexts/i18n-context";
-
-// 預設問題
-const defaultQuestions = [
-  { id: "1", question: "請簡單自我介紹" },
-  { id: "2", question: "為什麼想加入我們公司？" },
-  { id: "3", question: "描述一個你克服困難的經歷" },
-];
-const englishQuestions = [
-  { id: "1", question: "Tell me about yourself." },
-  { id: "2", question: "Why do you want to join our company?" },
-  { id: "3", question: "Describe a time you overcame a challenge." },
-];
+import { getInterviewQuestions } from "@/lib/turso/db";
+import { getDefaultInterviewQuestions, isTextInInterviewLocale, type InterviewLocale } from "@/lib/interview/question-utils";
 
 interface EvaluationResult {
   score: number;
   strengths: string[];
   improvements: string[];
   suggestions: string[];
+  saved: boolean;
 }
 
 function PracticeContent() {
   const { locale } = useI18n();
   const en = locale === "en";
   const searchParams = useSearchParams();
-  const questionId = searchParams.get("q");
+  const questionLocale: InterviewLocale = en ? "en" : "zh-TW";
+  const questionId = searchParams.get("q") || "1";
+  const defaultQuestions = getDefaultInterviewQuestions(questionLocale);
+  const [storedQuestion, setStoredQuestion] = useState<{ id: string; question: string } | null>(null);
+  const [questionLoadError, setQuestionLoadError] = useState<string | null>(null);
+  const displayedQuestion = defaultQuestions.find((question) => question.id === questionId) || storedQuestion;
 
-  // 找到對應的問題
-  const currentQuestion = questionId
-    ? defaultQuestions.find((q) => q.id === questionId)
-    : defaultQuestions[0];
-  const displayedQuestion = en
-    ? englishQuestions.find((question) => question.id === (currentQuestion?.id || "1")) || currentQuestion
-    : currentQuestion;
-
-  const {
-    isRecording,
-    isPaused,
-    recordingTime,
-    startRecording,
-    stopRecording,
-    pauseRecording,
-    resumeRecording,
-    cancelRecording,
-    error: recordingError,
-  } = useAudioRecorder();
+  useEffect(() => {
+    let active = true;
+    setStoredQuestion(null);
+    setQuestionLoadError(null);
+    if (/^(10|[1-9])$/.test(questionId)) return () => { active = false; };
+    getInterviewQuestions({ locale: questionLocale }).then((questions) => {
+      if (!active) return;
+      const question = questions.find((item) => item.id === questionId && isTextInInterviewLocale(item.question, questionLocale));
+      if (question) setStoredQuestion({ id: question.id, question: question.question });
+      else setQuestionLoadError(en ? "This question is not available in your question bank." : "題庫中找不到這個語言的題目");
+    }).catch(() => {
+      if (active) setQuestionLoadError(en ? "Could not load this question." : "無法載入這個題目");
+    });
+    return () => { active = false; };
+  }, [questionId, questionLocale, en]);
 
   const [transcript, setTranscript] = useState("");
-  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"record" | "text">("record");
-
-  const handleStopRecording = async () => {
-    const audioBlob = await stopRecording();
-    if (!audioBlob) return;
-
-    setIsTranscribing(true);
-    setError(null);
-
-    try {
-      // 上傳音訊並轉譯
-      const formData = new FormData();
-      formData.append("audio", audioBlob, "recording.webm");
-
-      const response = await fetch("/api/interview/transcribe", {
-        method: "POST",
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-
-      setTranscript(result.data.text);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : en ? "Transcription failed. Please try again." : "轉譯失敗");
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
 
   const handleEvaluate = async () => {
     if (!transcript.trim()) {
@@ -122,13 +68,16 @@ function PracticeContent() {
         body: JSON.stringify({
           question: displayedQuestion?.question || "",
           answer: transcript,
+          questionId,
+          locale: questionLocale,
+          durationSeconds: null,
         }),
       });
 
       const result = await response.json();
 
       if (!result.success) {
-        throw new Error(result.error);
+        throw new Error(en ? "Could not evaluate and save your answer. Please try again." : result.error);
       }
 
       setEvaluation(result.data);
@@ -140,7 +89,6 @@ function PracticeContent() {
   };
 
   const handleReset = () => {
-    cancelRecording();
     setTranscript("");
     setEvaluation(null);
     setError(null);
@@ -156,7 +104,7 @@ function PracticeContent() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/interview/questions">
+          <Link href="/interview">
             <ArrowLeft className="h-4 w-4 mr-2" />
             {en ? "Back to question bank" : "返回題庫"}
           </Link>
@@ -172,133 +120,23 @@ function PracticeContent() {
           <p className="text-lg font-medium">
             {displayedQuestion?.question || (en ? "Choose a question from the question bank." : "請從題庫選擇一個問題")}
           </p>
+          {questionLoadError && <p className="mt-2 text-sm text-destructive">{questionLoadError}</p>}
         </CardContent>
       </Card>
 
-      {/* 錄音/輸入區 */}
+      {/* 純文字回答區 */}
       <Card>
         <CardHeader>
           <CardTitle>{en ? "Your answer" : "你的回答"}</CardTitle>
-          <CardDescription>
-            {en ? "Record your answer or enter it as text." : "使用錄音或直接輸入文字回答"}
-          </CardDescription>
+          <CardDescription>{en ? "Write your answer in plain text." : "請使用純文字輸入回答"}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* 模式切換 */}
-          <div className="flex gap-2">
-            <Button
-              variant={mode === "record" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("record")}
-            >
-              <Mic className="h-4 w-4 mr-2" />
-              {en ? "Record" : "錄音模式"}
-            </Button>
-            <Button
-              variant={mode === "text" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("text")}
-            >
-              {en ? "Text" : "文字模式"}
-            </Button>
-          </div>
-
-          {mode === "record" ? (
-            <div className="space-y-4">
-              {/* 錄音控制 */}
-              <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                {isRecording && (
-                  <div className="text-center">
-                    <div className="text-4xl font-mono font-bold mb-2">
-                      {formatRecordingTime(recordingTime)}
-                    </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {isPaused ? (en ? "Paused" : "已暫停") : (en ? "Recording" : "錄音中")}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-3">
-                  {!isRecording ? (
-                    <Button
-                      size="lg"
-                      onClick={startRecording}
-                      disabled={isTranscribing}
-                      className="rounded-full h-16 w-16"
-                    >
-                      <Mic className="h-6 w-6" />
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={isPaused ? resumeRecording : pauseRecording}
-                      >
-                        {isPaused ? (
-                          <Play className="h-4 w-4" />
-                        ) : (
-                          <Pause className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button
-                        size="lg"
-                        variant="destructive"
-                        onClick={handleStopRecording}
-                        className="rounded-full h-16 w-16"
-                      >
-                        <Square className="h-6 w-6" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={cancelRecording}
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-
-                {recordingError && (
-                  <p className="text-sm text-destructive">{recordingError}</p>
-                )}
-
-                {isTranscribing && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>{en ? "Transcribing audio..." : "正在轉換語音..."}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* 轉譯結果 */}
-              {transcript && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">{en ? "Transcript" : "轉譯結果"}</label>
-                  <Textarea
-                    value={transcript}
-                    onChange={(e) => setTranscript(e.target.value)}
-                    rows={6}
-                    placeholder={en ? "Your transcript will appear here..." : "轉譯的文字會顯示在這裡..."}
-                  />
-                </div>
-              )}
-            </div>
-          ) : (
-            <Textarea
-              value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              rows={8}
-              placeholder={en ? "Type your answer..." : "直接輸入你的回答..."}
-            />
-          )}
+          <Textarea
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+            rows={10}
+            placeholder={en ? "Type your answer in plain text..." : "請以純文字輸入你的回答..."}
+          />
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -310,7 +148,7 @@ function PracticeContent() {
             </Button>
             <Button
               onClick={handleEvaluate}
-              disabled={!transcript.trim() || isEvaluating}
+              disabled={!transcript.trim() || !displayedQuestion || isEvaluating}
             >
               {isEvaluating ? (
                 <>
@@ -335,6 +173,12 @@ function PracticeContent() {
             <CardTitle>{en ? "AI feedback" : "AI 評分結果"}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {evaluation.saved && (
+              <p className="flex items-center gap-2 text-sm text-green-700">
+                <CheckCircle className="h-4 w-4" />
+                {en ? "Answer saved to your question bank." : "回答已儲存到面試題庫。"}
+              </p>
+            )}
             {/* 分數 */}
             <div className="text-center">
               <div className={`text-5xl font-bold ${getScoreColor(evaluation.score)}`}>

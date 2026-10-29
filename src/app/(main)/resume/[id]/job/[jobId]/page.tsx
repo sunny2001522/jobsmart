@@ -21,6 +21,9 @@ import {
 import { useResumeVersion, useVersionJobs } from "@/hooks";
 import { localizedToast as toast } from "@/lib/i18n/toast";
 import type { VersionJobResumeWithDetails } from "@/types";
+import { formatResumeText } from "@/lib/resume/ats-format";
+import { getResumeLanguageLabel, inferResumeLanguageCode } from "@/lib/resume/languages";
+import { ResumeHighlightedText } from "@/components/resume-highlighted-text";
 
 interface ComparePageProps {
   params: Promise<{ id: string; jobId: string }>;
@@ -35,18 +38,43 @@ export default function ComparePage({ params }: ComparePageProps) {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentJob, setCurrentJob] = useState<VersionJobResumeWithDetails | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState("");
 
   // 找出當前工作
   useEffect(() => {
     if (jobs.length > 0) {
       const job = jobs.find((j) => j.job_application_id === jobId);
-      if (job) {
-        setCurrentJob(job);
-      }
+      if (job) setCurrentJob(job);
     }
   }, [jobs, jobId]);
 
+  useEffect(() => {
+    if (!currentJob || !version || selectedLanguage) return;
+    setSelectedLanguage(currentJob.customized_language_code || version.active_language || version.base_language || inferResumeLanguageCode(version.base_plain_text));
+  }, [currentJob, version, selectedLanguage]);
+
   const isLoading = versionLoading || jobsLoading;
+  const baseLanguage = version?.base_language || inferResumeLanguageCode(version?.base_plain_text);
+  const languageCode = selectedLanguage || version?.active_language || baseLanguage;
+  const selectedCustomizedVariant = currentJob?.customized_variants?.find((variant) => variant.language_code === languageCode);
+  const legacyCustomizedMatches = (currentJob?.customized_language_code || baseLanguage) === languageCode;
+  const selectedCustomizedText = selectedCustomizedVariant?.customized_plain_text
+    || (legacyCustomizedMatches ? currentJob?.customized_plain_text : null)
+    || "";
+  const selectedHighlights = selectedCustomizedVariant?.jd_highlight_phrases
+    || (legacyCustomizedMatches ? currentJob?.jd_highlight_phrases : undefined)
+    || [];
+  const selectedBaseText = languageCode === baseLanguage
+    ? version?.base_plain_text || ""
+    : version?.language_variants?.find((variant) => variant.language_code === languageCode)?.plain_text || "";
+  const availableLanguages = [
+    { code: baseLanguage, label: getResumeLanguageLabel(baseLanguage) },
+    ...(version?.language_variants || []).map((variant) => ({ code: variant.language_code, label: getResumeLanguageLabel(variant.language_code) })),
+  ];
+  const selectedAtsScore = selectedCustomizedVariant?.ats_score
+    ?? (legacyCustomizedMatches ? currentJob?.ats_score : null);
+  const selectedMatchedKeywords = selectedCustomizedVariant?.matched_keywords
+    ?? (legacyCustomizedMatches ? currentJob?.matched_keywords : []);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -57,6 +85,7 @@ export default function ComparePage({ params }: ComparePageProps) {
         body: JSON.stringify({
           versionId,
           jobApplicationId: jobId,
+          languageCode: selectedLanguage || version?.active_language || version?.base_language || "zh-TW",
         }),
       });
 
@@ -77,7 +106,7 @@ export default function ComparePage({ params }: ComparePageProps) {
   };
 
   const handleExportPDF = async () => {
-    if (!currentJob?.customized_plain_text) {
+    if (!selectedCustomizedText) {
       toast.error("尚未生成客製化履歷");
       return;
     }
@@ -87,8 +116,8 @@ export default function ComparePage({ params }: ComparePageProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: currentJob.customized_plain_text,
-          title: `${version?.name} - ${currentJob.job_application?.company_name}`,
+          content: selectedCustomizedText,
+          title: `${version?.name} - ${currentJob?.job_application?.company_name} - ${getResumeLanguageLabel(selectedLanguage)}`,
         }),
       });
 
@@ -98,7 +127,7 @@ export default function ComparePage({ params }: ComparePageProps) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${version?.name}_${currentJob.job_application?.company_name}.pdf`;
+      a.download = `${version?.name}_${currentJob?.job_application?.company_name}_${selectedLanguage}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -143,14 +172,14 @@ export default function ComparePage({ params }: ComparePageProps) {
   }
 
   const jobApp = currentJob.job_application;
-  const hasCustomized = !!currentJob.customized_plain_text;
+  const hasCustomized = !!selectedCustomizedText;
   const generationStatus = currentJob.generation_status;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <Button
             variant="ghost"
             size="sm"
@@ -159,8 +188,8 @@ export default function ComparePage({ params }: ComparePageProps) {
             <ArrowLeft className="h-4 w-4 mr-2" />
             返回
           </Button>
-          <div>
-            <h1 className="text-xl font-bold flex items-center gap-2">
+          <div className="min-w-0">
+            <h1 className="flex items-center gap-2 text-xl font-bold">
               <Building2 className="h-5 w-5" />
               {jobApp?.company_name} - {jobApp?.position}
             </h1>
@@ -169,7 +198,18 @@ export default function ComparePage({ params }: ComparePageProps) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="履歷語言版本"
+            value={languageCode}
+            onChange={(event) => setSelectedLanguage(event.target.value)}
+            disabled={isGenerating}
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+          >
+            {availableLanguages.map((language) => (
+              <option key={language.code} value={language.code}>{language.label}</option>
+            ))}
+          </select>
           <Button
             variant="outline"
             onClick={handleGenerate}
@@ -206,13 +246,13 @@ export default function ComparePage({ params }: ComparePageProps) {
             </CardHeader>
             <CardContent>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">{currentJob.ats_score ?? "-"}</span>
+                <span className="text-3xl font-bold">{selectedAtsScore ?? "-"}</span>
                 <span className="text-sm text-muted-foreground">/ 100</span>
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden mt-2">
                 <div
                   className="h-full bg-primary transition-all"
-                  style={{ width: `${currentJob.ats_score ?? 0}%` }}
+                  style={{ width: `${selectedAtsScore ?? 0}%` }}
                 />
               </div>
             </CardContent>
@@ -227,14 +267,14 @@ export default function ComparePage({ params }: ComparePageProps) {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-1">
-                {currentJob.matched_keywords?.slice(0, 8).map((keyword) => (
+                {selectedMatchedKeywords?.slice(0, 8).map((keyword) => (
                   <Badge key={keyword} variant="secondary" className="text-xs">
                     {keyword}
                   </Badge>
                 ))}
-                {(currentJob.matched_keywords?.length ?? 0) > 8 && (
+                {(selectedMatchedKeywords?.length ?? 0) > 8 && (
                   <Badge variant="outline" className="text-xs">
-                    +{(currentJob.matched_keywords?.length ?? 0) - 8}
+                    +{(selectedMatchedKeywords?.length ?? 0) - 8}
                   </Badge>
                 )}
               </div>
@@ -269,7 +309,7 @@ export default function ComparePage({ params }: ComparePageProps) {
       {/* Dual Column Comparison */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Left: Base Resume */}
-        <Card className="flex flex-col">
+        <Card className="order-2 flex flex-col lg:order-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4" />
@@ -277,10 +317,10 @@ export default function ComparePage({ params }: ComparePageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1">
-            <ScrollArea className="h-[500px] pr-4">
-              {version.base_plain_text ? (
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                  {version.base_plain_text}
+            <ScrollArea className="h-[60vh] min-h-[320px] pr-4 lg:h-[500px]">
+              {selectedBaseText ? (
+                <div className="prose prose-sm max-w-none whitespace-pre-wrap break-words">
+                  {formatResumeText(selectedBaseText)}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
@@ -299,12 +339,12 @@ export default function ComparePage({ params }: ComparePageProps) {
         </Card>
 
         {/* Right: Customized Resume */}
-        <Card className="flex flex-col">
+        <Card className="order-1 flex flex-col lg:order-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Sparkles className="h-4 w-4" />
-              客製化履歷
-              {generationStatus === "completed" && (
+              客製化履歷 · {getResumeLanguageLabel(languageCode)}
+              {generationStatus === "completed" && hasCustomized && (
                 <Badge variant="secondary" className="ml-auto">
                   已生成
                 </Badge>
@@ -317,10 +357,10 @@ export default function ComparePage({ params }: ComparePageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1">
-            <ScrollArea className="h-[500px] pr-4">
-              {currentJob.customized_plain_text ? (
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                  {currentJob.customized_plain_text}
+            <ScrollArea className="h-[60vh] min-h-[320px] pr-4 lg:h-[500px]">
+              {selectedCustomizedText ? (
+                <div className="prose prose-sm max-w-none whitespace-pre-wrap break-words">
+                  <ResumeHighlightedText text={formatResumeText(selectedCustomizedText)} phrases={selectedHighlights} />
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
@@ -332,6 +372,9 @@ export default function ComparePage({ params }: ComparePageProps) {
                 </div>
               )}
             </ScrollArea>
+            {selectedHighlights.length > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">標記文字是 JD 中有來源履歷支持、且客製履歷新增使用的詞句。</p>
+            )}
           </CardContent>
         </Card>
       </div>

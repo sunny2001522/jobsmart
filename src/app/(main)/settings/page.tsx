@@ -46,6 +46,7 @@ import { getProfile, updateProfile } from "@/lib/turso/db";
 import type { Profile } from "@/lib/turso/types";
 import { useI18n } from "@/contexts/i18n-context";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { toast } from "sonner";
 
 // 擴展 Profile 類型以包含 Gmail 相關欄位
 interface ProfileWithGmail extends Profile {
@@ -67,6 +68,8 @@ function SettingsContent() {
 
   // Form states
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [weeklyDigest, setWeeklyDigest] = useState(true);
   const [interviewReminders, setInterviewReminders] = useState(true);
@@ -79,6 +82,8 @@ function SettingsContent() {
       if (data) {
         setProfile(data as ProfileWithGmail);
         setName(data.name || "");
+        setPhone(data.phone || "");
+        setLinkedinUrl(data.linkedin_url || "");
       }
       setIsLoading(false);
     };
@@ -100,17 +105,32 @@ function SettingsContent() {
   const handleSaveProfile = async () => {
     if (!profile) return;
 
+    const normalizedLinkedinUrl = linkedinUrl.trim();
+    if (normalizedLinkedinUrl) {
+      try {
+        const parsed = new URL(normalizedLinkedinUrl);
+        if (parsed.protocol !== "https:" || !(parsed.hostname === "linkedin.com" || parsed.hostname.endsWith(".linkedin.com")) || !parsed.pathname.startsWith("/in/")) {
+          throw new Error("請輸入公開的 LinkedIn 個人檔案網址，例如 https://www.linkedin.com/in/your-name");
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "LinkedIn 網址格式無效");
+        return;
+      }
+    }
+
     setIsSaving(true);
     setSaveSuccess(false);
-
-    const updated = await updateProfile({ name });
-    if (updated) {
+    try {
+      const updated = await updateProfile({ name: name.trim(), phone: phone.trim() || null, linkedin_url: normalizedLinkedinUrl || null });
+      if (!updated) throw new Error("個人資料儲存失敗");
       setProfile(updated);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "個人資料儲存失敗");
+    } finally {
+      setIsSaving(false);
     }
-
-    setIsSaving(false);
   };
 
   const handleSignOut = async () => {
@@ -215,6 +235,33 @@ function SettingsContent() {
                       onChange={(e) => setName(e.target.value)}
                       placeholder={copy("輸入你的姓名", "Enter your name")}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">{copy("電話", "Phone")}</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      autoComplete="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder={copy("選填，供求職表單填寫", "Optional; used to fill application forms")}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="linkedin-url">LinkedIn URL</Label>
+                    <Input
+                      id="linkedin-url"
+                      type="url"
+                      autoComplete="url"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      placeholder="https://www.linkedin.com/in/your-name"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {copy("選填；只有在你核准外掛填表時才會提供給 LinkedIn 表單。", "Optional; shared with a LinkedIn form only after you approve an extension fill task.")}
+                    </p>
                   </div>
 
                   <Button onClick={handleSaveProfile} disabled={isSaving}>

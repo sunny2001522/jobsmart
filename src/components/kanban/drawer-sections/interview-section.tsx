@@ -15,11 +15,6 @@ import {
   XCircle,
   Trophy,
   Ban,
-  Ghost,
-  HelpCircle,
-  ThumbsUp,
-  ThumbsDown,
-  Minus,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -28,16 +23,14 @@ import type {
   InterviewSource,
   InterviewSourceResult,
   InterviewAggregated,
-  InterviewStage,
 } from "@/types";
 import { useI18n } from "@/contexts/i18n-context";
+import { containsCjk, isTextInInterviewLocale } from "@/lib/interview/question-utils";
 
 const ALL_SOURCES: InterviewSource[] = ["dcard", "ptt", "qollie", "medium"];
 
 interface InterviewSectionProps {
-  companyName: string;
   position: string;
-  resumeText?: string;
   interviews?: InterviewExperience[];
   aggregated?: InterviewAggregated;
   isLoading?: boolean;
@@ -48,9 +41,7 @@ interface InterviewSectionProps {
 }
 
 export function InterviewSection({
-  companyName,
   position,
-  resumeText = "",
   interviews = [],
   aggregated,
   isLoading,
@@ -70,9 +61,15 @@ export function InterviewSection({
       ? interviews
       : interviews.filter((i) => i.source === activeSource);
   const resumeQuestions = [
-    `請具體說明你在履歷中與「${position}」最相關的一項成果。`,
-    "履歷提到的經驗中，哪一項最能證明你能解決這個職位的核心問題？",
-    resumeText ? "請深入說明履歷中一段經歷的背景、你的行動，以及最後的量化結果。" : "請準備一個能展現你能力的實際案例，並用 STAR 結構回答。",
+    isEnglish
+      ? "Which achievement from your experience is most relevant to this role?"
+      : `請說明你過去最符合「${position}」職務的一項成果。`,
+    isEnglish
+      ? "Which experience on your resume best shows that you can solve a core problem in this role?"
+      : "履歷中的哪段經驗最能證明你能解決這個職位的核心問題？",
+    isEnglish
+      ? "Walk me through one experience on your resume: the context, your actions, and the measurable result."
+      : "請說明履歷中的一段經歷，包括背景、你的行動，以及可量化的結果。",
   ];
 
   // 計算每個來源的數量
@@ -86,6 +83,7 @@ export function InterviewSection({
     },
     {} as Record<InterviewSource, number>
   );
+  const visibleCommonQuestions = (aggregated?.commonQuestions ?? []).filter((question) => !isEnglish || !containsCjk(question));
 
   const getSourceLabel = (source: string) => {
     const labels: Record<string, string> = {
@@ -93,59 +91,9 @@ export function InterviewSection({
       medium: "Medium",
       qollie: "Qollie",
       ptt: "PTT",
-      all: "全部",
+      all: isEnglish ? "All" : "全部",
     };
     return labels[source] || source;
-  };
-
-  const getDifficultyBadge = (difficulty: string | null) => {
-    switch (difficulty) {
-      case "easy":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">簡單</Badge>;
-      case "medium":
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">中等</Badge>;
-      case "hard":
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">困難</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const getOutcomeIcon = (outcome: string | null) => {
-    switch (outcome) {
-      case "offer":
-        return <Trophy className="h-4 w-4 text-green-500" />;
-      case "rejected":
-        return <Ban className="h-4 w-4 text-red-500" />;
-      case "ghosted":
-        return <Ghost className="h-4 w-4 text-gray-400" />;
-      default:
-        return <HelpCircle className="h-4 w-4 text-gray-400" />;
-    }
-  };
-
-  const getOutcomeLabel = (outcome: string | null) => {
-    switch (outcome) {
-      case "offer":
-        return "錄取";
-      case "rejected":
-        return "被拒";
-      case "ghosted":
-        return "無聲卡";
-      default:
-        return "未知";
-    }
-  };
-
-  const getSentimentIcon = (sentiment: string | null) => {
-    switch (sentiment) {
-      case "positive":
-        return <ThumbsUp className="h-3.5 w-3.5 text-green-500" />;
-      case "negative":
-        return <ThumbsDown className="h-3.5 w-3.5 text-red-500" />;
-      default:
-        return <Minus className="h-3.5 w-3.5 text-yellow-500" />;
-    }
   };
 
   if (isLoading) {
@@ -173,7 +121,7 @@ export function InterviewSection({
               ) : (
                 <Search className="h-4 w-4 mr-2" />
               )}
-              {isSearching ? "搜尋中..." : "搜尋面試經驗"}
+              {isSearching ? (isEnglish ? "Searching..." : "搜尋中...") : (isEnglish ? "Search interview reviews" : "搜尋面試經驗")}
             </Button>
           )}
         </div>
@@ -181,8 +129,8 @@ export function InterviewSection({
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />
             <span>
-              更新於{" "}
-              {new Date(lastSearchedAt).toLocaleDateString("zh-TW", {
+              {isEnglish ? "Updated " : "更新於 "}
+              {new Date(lastSearchedAt).toLocaleDateString(isEnglish ? "en-US" : "zh-TW", {
                 month: "short",
                 day: "numeric",
                 hour: "2-digit",
@@ -196,7 +144,7 @@ export function InterviewSection({
       {/* 搜尋進度 */}
       {isSearching && sourceResults && (
         <div className="p-3 bg-muted/50 rounded-lg space-y-2">
-          <p className="text-sm font-medium">正在搜尋面試經驗...</p>
+          <p className="text-sm font-medium">{isEnglish ? "Searching interview reviews..." : "正在搜尋面試經驗..."}</p>
           <div className="grid grid-cols-2 gap-2">
             {ALL_SOURCES.map((source) => {
               const result = sourceResults[source];
@@ -211,7 +159,7 @@ export function InterviewSection({
                   )}
                   <span>{getSourceLabel(source)}</span>
                   {result && (
-                    <span className="text-muted-foreground">({result.count} 則)</span>
+                    <span className="text-muted-foreground">({result.count} {isEnglish ? "reviews" : "則"})</span>
                   )}
                 </div>
               );
@@ -229,7 +177,7 @@ export function InterviewSection({
             className="h-7 text-xs"
             onClick={() => setActiveSource("all")}
           >
-            全部 ({interviews.length})
+            {isEnglish ? "All" : "全部"} ({interviews.length})
           </Button>
           {ALL_SOURCES.map((source) => {
             const count = sourceCounts[source] || 0;
@@ -253,8 +201,8 @@ export function InterviewSection({
       {(!interviews || interviews.length === 0) && !isSearching && (
         <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
           <MessageCircle className="h-8 w-8 mb-2" />
-          <p className="text-sm">尚無面試經驗資料</p>
-          <p className="text-xs">點擊「搜尋面試經驗」按鈕開始搜尋</p>
+          <p className="text-sm">{isEnglish ? "No interview reviews yet" : "尚無面試經驗資料"}</p>
+          <p className="text-xs">{isEnglish ? "Select Search interview reviews to get started." : "點擊「搜尋面試經驗」按鈕開始搜尋"}</p>
         </div>
       )}
 
@@ -262,7 +210,7 @@ export function InterviewSection({
         <CardContent className="space-y-3 p-4">
           <div>
             <h4 className="text-sm font-medium">{isEnglish ? "Prepare questions from the company and your resume" : "根據公司與你的履歷準備問題"}</h4>
-            <p className="mt-1 text-xs text-muted-foreground">{isEnglish ? "Company interview questions and resume follow-ups are collected in Interview Prep." : "公司面試經驗與履歷追問會一起整理到 Interview Prep。"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{isEnglish ? "Company interview questions and resume follow-ups are collected in the Question bank." : "公司面試經驗與履歷追問會一起整理到面試題庫。"}</p>
           </div>
           <ul className="space-y-2">
             {resumeQuestions.map((question, index) => (
@@ -283,22 +231,22 @@ export function InterviewSection({
             <div>
               <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
                 <Clock className="h-4 w-4" />
-                常見面試流程
+                {isEnglish ? "Common interview stages" : "常見面試流程"}
               </h4>
               <div className="flex items-center gap-1 overflow-x-auto pb-2">
-                {aggregated.commonStages.map((stage, index) => (
+                {aggregated.commonStages.filter((stage) => !isEnglish || !containsCjk(stage.name)).map((stage, index, stages) => (
                   <div key={stage.order} className="flex items-center">
                     <div className="flex flex-col items-center min-w-[70px]">
                       <Badge variant="secondary" className="text-xs whitespace-nowrap">
                         {stage.name}
                       </Badge>
-                      {stage.description && (
+                      {stage.description && (!isEnglish || !containsCjk(stage.description)) && (
                         <span className="text-[10px] text-muted-foreground text-center mt-0.5 line-clamp-1">
                           {stage.description}
                         </span>
                       )}
                     </div>
-                    {index < aggregated.commonStages.length - 1 && (
+                    {index < stages.length - 1 && (
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mx-0.5" />
                     )}
                   </div>
@@ -312,34 +260,34 @@ export function InterviewSection({
             <div className="flex items-center gap-1.5">
               <Trophy className="h-4 w-4 text-green-500" />
               <span className="font-medium">{aggregated.outcomeDistribution.offer}</span>
-              <span className="text-muted-foreground">錄取</span>
+              <span className="text-muted-foreground">{isEnglish ? "offers" : "錄取"}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Ban className="h-4 w-4 text-red-500" />
               <span className="font-medium">{aggregated.outcomeDistribution.rejected}</span>
-              <span className="text-muted-foreground">被拒</span>
+              <span className="text-muted-foreground">{isEnglish ? "rejections" : "被拒"}</span>
             </div>
             <div className="flex items-center gap-1.5 text-muted-foreground">
-              難度：
+              {isEnglish ? "Difficulty: " : "難度："}
               <span className="font-medium text-foreground">
-                簡單 {aggregated.difficultyDistribution.easy} /
-                中等 {aggregated.difficultyDistribution.medium} /
-                困難 {aggregated.difficultyDistribution.hard}
+                {isEnglish ? "Easy" : "簡單"} {aggregated.difficultyDistribution.easy} /
+                {isEnglish ? "Medium" : "中等"} {aggregated.difficultyDistribution.medium} /
+                {isEnglish ? "Hard" : "困難"} {aggregated.difficultyDistribution.hard}
               </span>
             </div>
           </div>
 
           {/* 常見面試題目 */}
-          {aggregated.commonQuestions.length > 0 && (
+          {visibleCommonQuestions.length > 0 && (
             <div>
               <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
                 <MessageCircle className="h-4 w-4" />
-                常見面試題目 ({aggregated.commonQuestions.length})
+                {isEnglish ? "Common interview questions" : "常見面試題目"} ({visibleCommonQuestions.length})
               </h4>
               <ul className="space-y-1.5">
                 {(showAllQuestions
-                  ? aggregated.commonQuestions
-                  : aggregated.commonQuestions.slice(0, 5)
+                  ? visibleCommonQuestions
+                  : visibleCommonQuestions.slice(0, 5)
                 ).map((q, i) => (
                   <li key={i} className="text-sm flex gap-2">
                     <span className="text-muted-foreground shrink-0">{i + 1}.</span>
@@ -347,7 +295,7 @@ export function InterviewSection({
                   </li>
                 ))}
               </ul>
-              {aggregated.commonQuestions.length > 5 && (
+              {visibleCommonQuestions.length > 5 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -357,12 +305,12 @@ export function InterviewSection({
                   {showAllQuestions ? (
                     <>
                       <ChevronUp className="h-3 w-3 mr-1" />
-                      收起
+                      {isEnglish ? "Show less" : "收起"}
                     </>
                   ) : (
                     <>
                       <ChevronDown className="h-3 w-3 mr-1" />
-                      顯示更多 ({aggregated.commonQuestions.length - 5})
+                      {isEnglish ? "Show more" : "顯示更多"} ({visibleCommonQuestions.length - 5})
                     </>
                   )}
                 </Button>
@@ -375,9 +323,9 @@ export function InterviewSection({
       {/* 面試經驗列表 */}
       {filteredInterviews.length > 0 && (
         <div className="space-y-3 mt-4">
-          <h4 className="text-sm font-medium">面試經驗分享 ({filteredInterviews.length})</h4>
+          <h4 className="text-sm font-medium">{isEnglish ? "Interview experiences" : "面試經驗分享"} ({filteredInterviews.length})</h4>
           {filteredInterviews.map((interview) => (
-            <InterviewCard key={interview.id} interview={interview} />
+            <InterviewCard key={interview.id} interview={interview} isEnglish={isEnglish} />
           ))}
         </div>
       )}
@@ -386,7 +334,7 @@ export function InterviewSection({
 }
 
 // 面試經驗卡片
-function InterviewCard({ interview }: { interview: InterviewExperience }) {
+function InterviewCard({ interview, isEnglish }: { interview: InterviewExperience; isEnglish: boolean }) {
   const [expanded, setExpanded] = useState(false);
 
   const getSourceLabel = (source: string) => {
@@ -413,11 +361,11 @@ function InterviewCard({ interview }: { interview: InterviewExperience }) {
   const getDifficultyBadge = (difficulty: string | null) => {
     switch (difficulty) {
       case "easy":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px] h-5">簡單</Badge>;
+        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px] h-5">{isEnglish ? "Easy" : "簡單"}</Badge>;
       case "medium":
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-[10px] h-5">中等</Badge>;
+        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-[10px] h-5">{isEnglish ? "Medium" : "中等"}</Badge>;
       case "hard":
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-[10px] h-5">困難</Badge>;
+        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-[10px] h-5">{isEnglish ? "Hard" : "困難"}</Badge>;
       default:
         return null;
     }
@@ -426,11 +374,11 @@ function InterviewCard({ interview }: { interview: InterviewExperience }) {
   const getOutcomeBadge = (outcome: string | null) => {
     switch (outcome) {
       case "offer":
-        return <Badge className="bg-green-100 text-green-700 text-[10px] h-5">錄取</Badge>;
+        return <Badge className="bg-green-100 text-green-700 text-[10px] h-5">{isEnglish ? "Offer" : "錄取"}</Badge>;
       case "rejected":
-        return <Badge className="bg-red-100 text-red-700 text-[10px] h-5">被拒</Badge>;
+        return <Badge className="bg-red-100 text-red-700 text-[10px] h-5">{isEnglish ? "Rejected" : "被拒"}</Badge>;
       case "ghosted":
-        return <Badge variant="secondary" className="text-[10px] h-5">無聲卡</Badge>;
+        return <Badge variant="secondary" className="text-[10px] h-5">{isEnglish ? "No response" : "無聲卡"}</Badge>;
       default:
         return null;
     }
@@ -442,8 +390,10 @@ function InterviewCard({ interview }: { interview: InterviewExperience }) {
         {/* Header */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {interview.title && (
-              <span className="text-sm font-medium line-clamp-1">{interview.title}</span>
+            {(interview.title || isEnglish) && (
+              <span className="text-sm font-medium line-clamp-1">
+                {isEnglish && containsCjk(interview.title || "") ? "Interview experience" : interview.title || "Interview experience"}
+              </span>
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -468,18 +418,18 @@ function InterviewCard({ interview }: { interview: InterviewExperience }) {
         <div className="flex items-center gap-1.5 mb-2">
           {getDifficultyBadge(interview.difficulty)}
           {getOutcomeBadge(interview.outcome)}
-          {interview.position && (
+          {interview.position && (!isEnglish || !containsCjk(interview.position)) && (
             <Badge variant="secondary" className="text-[10px] h-5">{interview.position}</Badge>
           )}
         </div>
 
         {/* 面試關卡 */}
-        {interview.stages.length > 0 && (
+        {interview.stages.filter((stage) => !isEnglish || !containsCjk(stage.name)).length > 0 && (
           <div className="flex items-center gap-1 mb-2 text-xs text-muted-foreground overflow-x-auto">
-            {interview.stages.map((stage, i) => (
+            {interview.stages.filter((stage) => !isEnglish || !containsCjk(stage.name)).map((stage, i, stages) => (
               <span key={stage.order} className="flex items-center">
                 <span className="whitespace-nowrap">{stage.name}</span>
-                {i < interview.stages.length - 1 && (
+                {i < stages.length - 1 && (
                   <ChevronRight className="h-3 w-3 mx-0.5" />
                 )}
               </span>
@@ -489,15 +439,17 @@ function InterviewCard({ interview }: { interview: InterviewExperience }) {
 
         {/* 內容摘要 */}
         <p className={`text-sm text-muted-foreground ${expanded ? "" : "line-clamp-2"}`}>
-          {interview.content}
+          {isEnglish && containsCjk(interview.content)
+            ? "This source review is in another language. Open the original source to read it."
+            : interview.content}
         </p>
 
         {/* 面試題目 */}
-        {interview.questions.length > 0 && expanded && (
+        {interview.questions.filter((question) => !isEnglish || isTextInInterviewLocale(question, "en")).length > 0 && expanded && (
           <div className="mt-2 pt-2 border-t">
-            <p className="text-xs font-medium mb-1">面試題目：</p>
+            <p className="text-xs font-medium mb-1">{isEnglish ? "Interview questions:" : "面試題目："}</p>
             <ul className="text-xs text-muted-foreground space-y-0.5">
-              {interview.questions.slice(0, 5).map((q, i) => (
+              {interview.questions.filter((question) => !isEnglish || isTextInInterviewLocale(question, "en")).slice(0, 5).map((q, i) => (
                 <li key={i}>• {q}</li>
               ))}
             </ul>
@@ -505,11 +457,11 @@ function InterviewCard({ interview }: { interview: InterviewExperience }) {
         )}
 
         {/* 面試建議 */}
-        {interview.tips.length > 0 && expanded && (
+        {interview.tips.filter((tip) => !isEnglish || isTextInInterviewLocale(tip, "en")).length > 0 && expanded && (
           <div className="mt-2 pt-2 border-t">
-            <p className="text-xs font-medium mb-1">面試建議：</p>
+            <p className="text-xs font-medium mb-1">{isEnglish ? "Interview tips:" : "面試建議："}</p>
             <ul className="text-xs text-muted-foreground space-y-0.5">
-              {interview.tips.map((tip, i) => (
+              {interview.tips.filter((tip) => !isEnglish || isTextInInterviewLocale(tip, "en")).map((tip, i) => (
                 <li key={i}>• {tip}</li>
               ))}
             </ul>
@@ -524,11 +476,11 @@ function InterviewCard({ interview }: { interview: InterviewExperience }) {
             className="h-6 text-xs px-2"
             onClick={() => setExpanded(!expanded)}
           >
-            {expanded ? "收起" : "展開詳情"}
+            {expanded ? (isEnglish ? "Show less" : "收起") : (isEnglish ? "View details" : "展開詳情")}
           </Button>
           {interview.published_at && (
             <p className="text-xs text-muted-foreground">
-              {new Date(interview.published_at).toLocaleDateString("zh-TW")}
+              {new Date(interview.published_at).toLocaleDateString(isEnglish ? "en-US" : "zh-TW")}
             </p>
           )}
         </div>

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/contexts/i18n-context";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { BrandLogo } from "@/components/brand-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -70,11 +71,8 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="border-b px-4 py-4">
-        <Link href="/applications" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-            J
-          </div>
-          <span className="font-semibold text-lg">JobSmart</span>
+        <Link href="/applications" aria-label="WiSEjOB" className="flex items-center">
+          <BrandLogo />
         </Link>
       </SidebarHeader>
 

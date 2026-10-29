@@ -7,6 +7,7 @@ import {
   Font,
 } from "@react-pdf/renderer";
 import type { Style } from "@react-pdf/types";
+import { formatResumeText, isResumeSection } from "@/lib/resume/ats-format";
 
 // 註冊中文字體
 Font.register({
@@ -27,62 +28,66 @@ const styles = StyleSheet.create({
   page: {
     fontFamily: "Noto Sans TC",
     fontSize: 10,
-    paddingTop: 30,
-    paddingBottom: 30,
-    paddingHorizontal: 40,
-    lineHeight: 1.5,
+    color: "#111111",
+    paddingTop: 36,
+    paddingBottom: 36,
+    paddingHorizontal: 46,
+    lineHeight: 1.35,
   },
   header: {
-    marginBottom: 20,
+    marginBottom: 8,
   },
   name: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 700,
     textAlign: "center",
-    marginBottom: 8,
-  },
-  contact: {
-    fontSize: 10,
-    textAlign: "center",
-    color: "#666",
     marginBottom: 4,
   },
+  contact: {
+    fontSize: 9,
+    textAlign: "center",
+    color: "#222222",
+    marginBottom: 2,
+  },
   section: {
-    marginBottom: 15,
+    marginBottom: 6,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: 700,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
-    paddingBottom: 4,
-    marginBottom: 8,
+    textTransform: "uppercase",
+    borderBottomWidth: 0.75,
+    borderBottomColor: "#222222",
+    paddingBottom: 2,
+    marginBottom: 5,
   },
   subTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 700,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   date: {
     fontSize: 9,
-    color: "#666",
+    color: "#222222",
     fontStyle: "italic",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   paragraph: {
     fontSize: 10,
-    marginBottom: 6,
-    textAlign: "justify",
+    marginBottom: 3,
+    textAlign: "left",
   },
   bulletList: {
-    marginLeft: 10,
+    marginLeft: 11,
+    marginTop: 1,
+    marginBottom: 3,
   },
   bulletItem: {
     flexDirection: "row",
-    marginBottom: 3,
+    marginBottom: 2,
   },
   bullet: {
-    width: 10,
+    width: 9,
     fontSize: 10,
   },
   bulletText: {
@@ -109,7 +114,7 @@ interface TipTapNode {
 }
 
 interface ResumeTemplateProps {
-  content: TipTapNode;
+  content: TipTapNode | string;
   title?: string;
 }
 
@@ -179,7 +184,7 @@ function renderNode(node: TipTapNode, index: number): React.ReactNode {
 
       // 檢查是否是聯絡資訊（在 header 後面）
       const text = node.content?.map((n) => n.text || "").join("") || "";
-      const isContact = text.includes("📧") || text.includes("📱") || text.includes("@");
+      const isContact = text.includes("📧") || text.includes("📱") || text.includes("📍") || text.includes("@");
 
       if (isContact) {
         return (
@@ -254,7 +259,9 @@ function renderNode(node: TipTapNode, index: number): React.ReactNode {
 }
 
 export function ResumeTemplate({ content }: ResumeTemplateProps) {
-  const nodes = content.content || [];
+  const nodes = typeof content === "string"
+    ? plainTextNodes(formatResumeText(content))
+    : content.content || [];
 
   return (
     <Document>
@@ -263,6 +270,25 @@ export function ResumeTemplate({ content }: ResumeTemplateProps) {
       </Page>
     </Document>
   );
+}
+
+function plainTextNodes(text: string): TipTapNode[] {
+  return text.split("\n").map((line, index) => {
+    if (!line.trim()) return { type: "paragraph", content: [] };
+    if (/^-\s+/.test(line)) {
+      return {
+        type: "bulletList",
+        content: [{
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: line.replace(/^-\s+/, "") }] }],
+        }],
+      };
+    }
+    if (isResumeSection(line)) {
+      return { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: line }] };
+    }
+    return { type: index === 0 ? "heading" : "paragraph", attrs: index === 0 ? { level: 1 } : undefined, content: [{ type: "text", text: line }] };
+  });
 }
 
 export { renderToStream } from "@react-pdf/renderer";

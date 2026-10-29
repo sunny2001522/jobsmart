@@ -50,9 +50,8 @@ import {
   updateJobApplication,
   getResumeVersions,
   getValueRanking,
-  updateVersionJobResume,
 } from "@/lib/turso/db";
-import type { JobApplication, ApplicationStatus, JDContentZh } from "@/types";
+import type { JobApplication, ApplicationStatus, JDContentZh, CoverLetterDraft } from "@/types";
 import type { ResumeVersion } from "@/lib/turso/types";
 import { KANBAN_COLUMNS } from "@/types";
 
@@ -71,13 +70,15 @@ const customCollisionDetection: CollisionDetection = (args) => {
 };
 
 const TOUR_STORAGE_KEY = "jobsmart.tour.applications.v1";
+type ResumeAudit = { status: "passed" | "needs_attention"; summary: string; findings: Array<{ claim: string; status: string; evidence: string; reason: string }>; requirements: Array<{ requirement: string; priority: string; evidence: string; status: string }> };
+type PreparedApplication = { applicationId: string; relationId: string; versionId: string; versionName: string; customizedContent: string; atsScore: number; matchedKeywords: string[]; missingKeywords: string[]; suggestions: string[]; audit: ResumeAudit; coverLetter: CoverLetterDraft };
 
 const tourContent: Record<"zh-TW" | "en", { steps: SpotlightStep[]; labels: { next: string; prev: string; skip: string; done: string } }> = {
   "zh-TW": {
     labels: { next: "下一步", prev: "上一步", skip: "略過", done: "開始使用" },
     steps: [
       { target: "progress", title: "找工作進度", body: "這裡列出求職的每個步驟與完成度，點任何一步就能直接前往處理。" },
-      { target: "ai-search", title: "AI 找職缺", body: "依照你設定的職位關鍵字搜尋公開職缺，找到的結果會自動放進「想投遞」欄。" },
+      { target: "ai-search", title: "搜尋職缺", body: "使用你儲存的關鍵字搜尋公開職缺。結果會加入「候選職缺」；確認 JD 後再建立客製履歷與求職信。" },
       { target: "add", title: "手動新增追蹤", body: "看到喜歡的職缺？貼上網址或職缺描述，JobSmart 會自動解析並加入看板。" },
       { target: "kanban", title: "求職看板", body: "拖曳卡片更新進度。在「想投遞」的卡片按「OK — 準備履歷」，AI 會依 JD 產生客製履歷讓你審核。" },
       { target: "nav", title: "更多工具", body: "在這裡切換履歷管理、面試練習與價值觀排序，先建立一份履歷才能使用 AI 客製功能。" },
@@ -88,9 +89,9 @@ const tourContent: Record<"zh-TW" | "en", { steps: SpotlightStep[]; labels: { ne
     labels: { next: "Next", prev: "Back", skip: "Skip", done: "Get started" },
     steps: [
       { target: "progress", title: "Your job search progress", body: "Each step of your search and how far along you are. Click any step to jump straight to it." },
-      { target: "ai-search", title: "AI job search", body: "Searches public listings with your target role. Results land in the Wishlist column automatically." },
+      { target: "ai-search", title: "Search public jobs", body: "Searches public listings with your saved keywords. Results go to Candidate jobs for review; they are not applications." },
       { target: "add", title: "Track a job manually", body: "Found a job you like? Paste its link or description and JobSmart will parse it onto the board." },
-      { target: "kanban", title: "Application board", body: "Drag cards to update their stage. On a Wishlist card, click “Prepare resume” to get an AI-tailored resume to review." },
+      { target: "kanban", title: "Application board", body: "Drag cards to update their stage. On a Wishlist card, click “Prepare resume” to generate a tailored resume and cover letter for review." },
       { target: "nav", title: "More tools", body: "Switch to resumes, interview practice and values ranking here. Create a resume first to use AI tailoring." },
       { target: "tour-replay", title: "Replay this tour", body: "Click here any time to see this walkthrough again." },
     ],
@@ -116,10 +117,14 @@ export default function ApplicationsPage() {
   const [jdDraft, setJdDraft] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
-  const [prepared, setPrepared] = useState<{ applicationId: string; relationId: string; versionId: string; versionName: string; customizedContent: string; atsScore: number; matchedKeywords: string[]; missingKeywords: string[]; suggestions: string[]; audit: { status: "passed" | "needs_attention"; summary: string; findings: Array<{ claim: string; status: string; evidence: string; reason: string }>; requirements: Array<{ requirement: string; priority: string; evidence: string; status: string }> } } | null>(null);
+  const [prepared, setPrepared] = useState<PreparedApplication | null>(null);
   const [draftContent, setDraftContent] = useState("");
+  const [coverLetterDraft, setCoverLetterDraft] = useState<CoverLetterDraft | null>(null);
+  const [approvedForFill, setApprovedForFill] = useState(false);
+  const [creatingFillTask, setCreatingFillTask] = useState(false);
   const [preparingApplicationIds, setPreparingApplicationIds] = useState<Set<string>>(new Set());
   const [isAppliedConfirmOpen, setIsAppliedConfirmOpen] = useState(false);
+  const [pendingAppliedApplicationId, setPendingAppliedApplicationId] = useState<string | null>(null);
 
   const { selectedCategoryId } = useJobCategoryContext();
   const isMobile = useIsMobile();
@@ -220,6 +225,10 @@ export default function ApplicationsPage() {
   }, [progressSteps]);
 
   const handleAddClick = (status: ApplicationStatus) => {
+    if (status === "applied") {
+      toast.info("請先新增職缺；親自送出申請後再拖入「已投遞」欄確認");
+      return;
+    }
     setAddDialogStatus(status);
     setIsAddDialogOpen(true);
   };
@@ -265,9 +274,7 @@ export default function ApplicationsPage() {
       if (!response.ok) throw new Error(result.error || "搜尋失敗");
       await loadAutomation();
       await loadApplications();
-      const summary = result.data.promoted > 0 ? `找到 ${result.data.discovered} 個職缺，新增 ${result.data.promoted} 個到「想投遞」` : `找到 ${result.data.discovered} 個職缺，都已在看板上`;
-      if (result.data.provider === "demo-provider") toast.warning(`${summary}（未設定搜尋 API，目前為示範資料）`);
-      else toast.success(summary);
+      toast.success(`搜尋完成：找到 ${result.data.discovered} 筆，新加入 ${result.data.promoted} 筆候選職缺`);
     } catch (error) { toast.error(error instanceof Error ? error.message : "搜尋失敗，請稍後重試"); }
     finally { setAutomationRunning(false); }
   };
@@ -277,11 +284,15 @@ export default function ApplicationsPage() {
     setJdDraft(lead.snippet || "");
     setPrepared(null);
     setDraftContent("");
+    setCoverLetterDraft(null);
+    setApprovedForFill(false);
   };
   const closeLead = (open: boolean) => {
     if (!open && !preparing && !savingDraft) {
       setActiveLead(null);
       setPrepared(null);
+      setCoverLetterDraft(null);
+      setApprovedForFill(false);
     }
   };
   const prepareLead = async () => {
@@ -293,6 +304,8 @@ export default function ApplicationsPage() {
       if (!response.ok) throw new Error(result.error || "履歷準備失敗");
       setPrepared({ applicationId: result.data.applicationId, ...result.data.resume });
       setDraftContent(result.data.resume.customizedContent);
+      setCoverLetterDraft(result.data.resume.coverLetter);
+      setApprovedForFill(false);
       await Promise.all([loadAutomation(), loadApplications()]);
       toast.success("客製履歷已建立，請逐項審核");
     } catch (error) {
@@ -300,32 +313,67 @@ export default function ApplicationsPage() {
     } finally { setPreparing(false); }
   };
   const savePreparedDraft = async () => {
-    if (!prepared) return;
+    if (!prepared || !coverLetterDraft) return;
     setSavingDraft(true);
     try {
-      const response = await fetch("/api/resume/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versionId: prepared.versionId, applicationId: prepared.applicationId, draft: draftContent, jdContent: jdDraft }) });
+      const response = await fetch("/api/resume/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versionId: prepared.versionId, applicationId: prepared.applicationId, draft: draftContent, jdContent: jdDraft, coverLetter: coverLetterDraft }) });
       const reviewed = await response.json();
       if (!response.ok) throw new Error(reviewed.error || "履歷事實審核失敗");
-      const saved = await updateVersionJobResume(prepared.relationId, { customized_plain_text: draftContent, generation_status: "completed", ai_suggestions: { suggestions: prepared.suggestions, audit: reviewed.data.audit } });
-      if (!saved) throw new Error("儲存失敗");
-      setPrepared({ ...prepared, customizedContent: draftContent, audit: reviewed.data.audit });
-      toast.success("草稿已儲存並重新完成事實審核");
+      setPrepared({ ...prepared, customizedContent: draftContent, audit: reviewed.data.audit, coverLetter: coverLetterDraft });
+      setApprovedForFill(false);
+      toast.success("履歷與求職信已儲存；履歷事實審核已更新");
     } catch (error) { toast.error(error instanceof Error ? error.message : "儲存失敗"); }
     finally { setSavingDraft(false); }
   };
+  const startLinkedInFill = async () => {
+    if (!prepared || !coverLetterDraft || !approvedForFill) return;
+    const linkedinUrl = activeLead?.url || "";
+    if (!/^https:\/\/(?:[a-z0-9-]+\.)*linkedin\.com\//i.test(linkedinUrl)) {
+      toast.error("此職缺不是 LinkedIn 網址，請開啟原職缺頁面手動操作");
+      return;
+    }
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) { toast.error("瀏覽器封鎖了新分頁，請允許 JobSmart 開啟分頁後重試"); return; }
+    setCreatingFillTask(true);
+    try {
+      const response = await fetch("/api/linkedin/extension/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId: prepared.applicationId, approved: true }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "無法建立 LinkedIn 填表任務");
+      tab.location.href = result.data.jobUrl;
+      toast.success("填表任務已交給外掛；請在 LinkedIn 檢查每個欄位與附件");
+    } catch (error) {
+      tab.close();
+      toast.error(error instanceof Error ? error.message : "無法啟動外掛填表");
+    } finally { setCreatingFillTask(false); }
+  };
   const markAsApplied = () => {
-    if (prepared) setIsAppliedConfirmOpen(true);
+    if (!prepared) return;
+    setPendingAppliedApplicationId(prepared.applicationId);
+    setIsAppliedConfirmOpen(true);
   };
   const confirmMarkAsApplied = async () => {
-    if (!prepared) return;
+    if (!pendingAppliedApplicationId) return;
     try {
-      const updated = await updateJobApplication(prepared.applicationId, { status: "applied", applied_at: new Date().toISOString() });
-      if (!updated) throw new Error("狀態更新失敗");
+      const response = await fetch("/api/applications/mark-applied", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId: pendingAppliedApplicationId, confirmed: true }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "狀態更新失敗");
+      const updated = result.data as JobApplication;
       setApplications((previous) => previous.map((application) => application.id === updated.id ? updated : application));
       toast.success("已更新為已投遞");
       setIsAppliedConfirmOpen(false);
-      setActiveLead(null);
-      setPrepared(null);
+      setPendingAppliedApplicationId(null);
+      if (prepared?.applicationId === updated.id) {
+        setActiveLead(null);
+        setPrepared(null);
+      }
     } catch (error) { toast.error(error instanceof Error ? error.message : "更新失敗"); }
   };
   const deleteLead = async (id: string) => {
@@ -372,8 +420,11 @@ export default function ApplicationsPage() {
         missingKeywords: result.data.missingKeywords,
         suggestions: result.data.suggestions,
         audit: result.data.audit,
+        coverLetter: result.data.coverLetter,
       });
       setDraftContent(result.data.customizedContent);
+      setCoverLetterDraft(result.data.coverLetter);
+      setApprovedForFill(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "履歷準備失敗，請稍後重試", { id: toastId });
     } finally {
@@ -386,6 +437,13 @@ export default function ApplicationsPage() {
   };
   const handleStatusChange = async (applicationId: string, newStatus: ApplicationStatus) => {
     const application = applications.find((item) => item.id === applicationId);
+    if (newStatus === "applied") {
+      if (application?.status !== "applied") {
+        setPendingAppliedApplicationId(applicationId);
+        setIsAppliedConfirmOpen(Boolean(application));
+      }
+      return;
+    }
     // Dropping a wishlist card into "Preparing" is the same explicit action
     // as pressing the card's Prepare resume button: generate both artifacts.
     if (application?.status === "wishlist" && newStatus === "editing") {
@@ -616,7 +674,8 @@ export default function ApplicationsPage() {
           </div>
           <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
             <JobCategoryTabs className="h-8 shrink-0" showStats stats={categoryStats} totalCount={applications.length} />
-            <Button data-tour="ai-search" size="sm" className="px-2 sm:px-3" onClick={runAutomation} disabled={automationRunning} aria-label={automationRunning ? "搜尋中" : "AI 找職缺"} title={automationRunning ? "搜尋中" : "AI 找職缺"}><Sparkles className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">{automationRunning ? "搜尋中" : "AI 找職缺"}</span></Button>
+            <Button data-tour="ai-search" size="sm" className="px-2 sm:px-3" onClick={runAutomation} disabled={automationRunning} aria-label={automationRunning ? "搜尋中" : "搜尋職缺"} title={automationRunning ? "搜尋中" : "搜尋職缺"}><Sparkles className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">{automationRunning ? "搜尋中" : "搜尋職缺"}</span></Button>
+            <Button variant="outline" size="sm" asChild><Link href="/automation">搜尋設定</Link></Button>
             <label className="relative hidden md:block"><span className="sr-only">搜尋公司或職稱</span><Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋公司或職稱" className="h-9 w-64 pl-8 pr-8" />{searchQuery && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="清除搜尋" onClick={() => setSearchQuery("")}><X className="h-3.5 w-3.5" /></button>}</label>
             <Button variant="outline" size="icon" className="md:hidden" aria-label="搜尋公司或職稱" title="搜尋公司或職稱" onClick={() => setShowMobileSearch((value) => !value)}><Search className="h-4 w-4" /></Button>
             <Button
@@ -671,6 +730,25 @@ export default function ApplicationsPage() {
           </div>
         </section>
 
+        {jobLeads.length > 0 && <section className="space-y-3 rounded-xl border bg-card p-4" aria-labelledby="job-leads-title">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div><h2 id="job-leads-title" className="text-base font-semibold">候選職缺 · {jobLeads.length}</h2><p className="text-xs text-muted-foreground">確認職缺內容後，選擇一份履歷產生客製履歷與求職信。</p></div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {jobLeads.map((lead) => <article key={lead.id} className="min-w-0 rounded-lg border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0"><h3 className="font-medium">{lead.role}</h3><p className="text-sm text-muted-foreground">{lead.company}</p><p className="mt-1 text-xs text-muted-foreground">來源：{lead.source}</p></div>
+                <button type="button" onClick={() => void deleteLead(lead.id)} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="移除候選職缺"><Trash2 className="h-4 w-4" /></button>
+              </div>
+              <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">{lead.snippet || "搜尋來源沒有提供完整 JD，請開啟職缺頁面後複製完整描述。"}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => openLead(lead)}>檢查 JD 並準備材料</Button>
+                {lead.url && <Button size="sm" variant="outline" asChild><a href={lead.url} target="_blank" rel="noreferrer">開啟原職缺</a></Button>}
+              </div>
+            </article>)}
+          </div>
+        </section>}
+
         {showMobileSearch && <div className="md:hidden"><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋公司或職稱" className="h-10 pl-9" />{searchQuery && <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="清除搜尋" onClick={() => setSearchQuery("")}><X className="h-4 w-4" /></button>}</div></div>}
 
         {searchQuery && filteredApplications.length === 0 && <div className="rounded-xl border border-dashed px-4 py-8 text-center"><p className="text-sm font-medium">找不到符合「{searchQuery}」的職缺</p><button className="mt-1 text-xs text-primary hover:underline" onClick={() => setSearchQuery("")}>清除搜尋</button></div>}
@@ -717,21 +795,34 @@ export default function ApplicationsPage() {
             <div className={`rounded-lg border p-3 ${prepared.audit.status === "passed" ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}><p className="text-xs font-semibold">事實審核 · {prepared.audit.status === "passed" ? "未發現無根據主張" : "有項目需要確認"}</p><p className="mt-1 text-xs text-muted-foreground">{prepared.audit.summary}</p>{prepared.audit.findings.filter((finding) => finding.status !== "supported").map((finding, index) => <div key={`${index}-${finding.claim}`} className="mt-2 rounded border bg-background p-2 text-xs"><p className="font-medium">{finding.status === "exaggerated" ? "責任或成果可能被放大" : "缺少履歷依據"}：{finding.claim}</p><p className="mt-1 text-muted-foreground">{finding.reason}{finding.evidence ? ` · 原履歷依據：${finding.evidence}` : ""}</p></div>)}</div>
             <div className="rounded-lg border p-3"><p className="mb-2 text-xs font-medium">JD 條件與履歷證據</p><div className="space-y-2">{prepared.audit.requirements.map((item, index) => <div key={`${index}-${item.requirement}`} className="flex items-start justify-between gap-3 text-xs"><div><span className="font-medium">{item.requirement}</span><p className="mt-0.5 text-muted-foreground">{item.evidence || "履歷未提供可引用證據"}</p></div><span className="shrink-0 text-muted-foreground">{item.priority === "required" ? "必要" : "加分"} · {item.status === "supported" ? "有證據" : item.status === "partial" ? "部分符合" : "缺口"}</span></div>)}</div></div>
             {prepared.suggestions.length > 0 && <div className="rounded-lg border p-3"><p className="mb-1 text-xs font-medium">改善建議</p><ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">{prepared.suggestions.map((suggestion, index) => <li key={`${index}-${suggestion}`}>{suggestion}</li>)}</ul></div>}
-            <div className="space-y-2"><div className="flex items-center justify-between gap-2"><label className="text-sm font-medium" htmlFor="tailored-resume">履歷客製草稿 · {prepared.versionName}</label><a className="shrink-0 text-xs text-primary hover:underline" href={`/resume/${prepared.versionId}`} target="_blank" rel="noreferrer">檢視原履歷</a></div><Textarea id="tailored-resume" value={draftContent} onChange={(event) => setDraftContent(event.target.value)} rows={13} className="resize-y font-mono text-xs leading-5" /></div>
-            <p className="rounded-lg bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">送出前請逐項核對公司、日期、成果數字與技能。JobSmart 不會替你按下 LinkedIn 最後的送出按鈕。</p>
+            <div className="space-y-2"><div className="flex items-center justify-between gap-2"><label className="text-sm font-medium" htmlFor="tailored-resume">履歷客製草稿 · {prepared.versionName}</label><a className="shrink-0 text-xs text-primary hover:underline" href={`/resume/${prepared.versionId}`} target="_blank" rel="noreferrer">檢視原履歷</a></div><Textarea id="tailored-resume" value={draftContent} onChange={(event) => { setDraftContent(event.target.value); setApprovedForFill(false); }} rows={13} className="resize-y font-mono text-xs leading-5" /></div>
+            {coverLetterDraft && <div className="space-y-2 rounded-lg border p-3">
+              <p className="text-sm font-medium">求職信草稿</p>
+              <label className="block space-y-1 text-xs font-medium">主旨<Input value={coverLetterDraft.subject} onChange={(event) => { setCoverLetterDraft({ ...coverLetterDraft, subject: event.target.value }); setApprovedForFill(false); }} /></label>
+              <label className="block space-y-1 text-xs font-medium">內文<Textarea value={coverLetterDraft.body} onChange={(event) => { setCoverLetterDraft({ ...coverLetterDraft, body: event.target.value }); setApprovedForFill(false); }} rows={8} className="resize-y text-sm leading-6" /></label>
+              <p className="text-xs text-muted-foreground">附件提示：{coverLetterDraft.attachmentNote}</p>
+            </div>}
+            <label className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs leading-5 text-amber-900 dark:text-amber-200">
+              <input type="checkbox" className="mt-1" checked={approvedForFill} onChange={(event) => setApprovedForFill(event.target.checked)} />
+              <span>我已檢查履歷與求職信的公司、日期、成果數字和技能；同意把這份履歷、求職信及我的姓名、Email、已儲存電話和 LinkedIn 網址提供給已配對的 JobSmart 外掛填入 LinkedIn 表單。</span>
+            </label>
+            <p className="text-xs leading-5 text-muted-foreground">外掛只填入支援的欄位與履歷附件。請在 LinkedIn 檢查未填欄位、每項資料與附件，再由你親自送出申請。</p>
+            <p className="text-xs text-muted-foreground">首次使用請先<Link className="ml-1 text-primary hover:underline" href="/settings/linkedin">配對並啟用 LinkedIn 外掛</Link>。</p>
           </div>}
 
           <DialogFooter className="gap-2 sm:gap-2">
             {!prepared ? <Button onClick={prepareLead} disabled={preparing || !selectedVersionId || jdDraft.trim().length < 80}>{preparing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />正在分析並建立草稿</> : <><Sparkles className="mr-2 h-4 w-4" />同意並客製化履歷</>}</Button> : <>
-              <Button variant="outline" onClick={savePreparedDraft} disabled={savingDraft || !draftContent.trim() || draftContent === prepared.customizedContent}>{savingDraft ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}{savingDraft ? "儲存中" : "儲存草稿修改"}</Button>
-              <Button variant="secondary" asChild disabled={draftContent !== prepared.customizedContent}><a href={activeLead?.url || "https://www.linkedin.com/jobs/"} target="_blank" rel="noreferrer" onClick={(event) => { if (draftContent !== prepared.customizedContent) event.preventDefault(); }}><ExternalLink className="mr-2 h-4 w-4" />前往職缺頁面</a></Button>
-              <Button onClick={markAsApplied} disabled={draftContent !== prepared.customizedContent}>我已親自送出</Button>
+              <Button variant="outline" onClick={savePreparedDraft} disabled={savingDraft || !draftContent.trim() || !coverLetterDraft || (draftContent === prepared.customizedContent && JSON.stringify(coverLetterDraft) === JSON.stringify(prepared.coverLetter))}>{savingDraft ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}{savingDraft ? "儲存中" : "儲存並重新審核"}</Button>
+              {/^https:\/\/(?:[a-z0-9-]+\.)*linkedin\.com\//i.test(activeLead?.url || "")
+                ? <Button onClick={startLinkedInFill} disabled={!approvedForFill || creatingFillTask || draftContent !== prepared.customizedContent || !coverLetterDraft || JSON.stringify(coverLetterDraft) !== JSON.stringify(prepared.coverLetter)}>{creatingFillTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}交給 LinkedIn 外掛填表</Button>
+                : <Button variant="secondary" asChild disabled={draftContent !== prepared.customizedContent || JSON.stringify(coverLetterDraft) !== JSON.stringify(prepared.coverLetter)}><a href={activeLead?.url || "#"} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />前往職缺頁面</a></Button>}
+              <Button variant="outline" onClick={markAsApplied} disabled={draftContent !== prepared.customizedContent || JSON.stringify(coverLetterDraft) !== JSON.stringify(prepared.coverLetter)}>我已親自送出</Button>
             </>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={isAppliedConfirmOpen} onOpenChange={setIsAppliedConfirmOpen}>
+      <AlertDialog open={isAppliedConfirmOpen} onOpenChange={(open) => { setIsAppliedConfirmOpen(open); if (!open) setPendingAppliedApplicationId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{locale === "en" ? "Confirm application submitted" : "確認已送出申請"}</AlertDialogTitle>

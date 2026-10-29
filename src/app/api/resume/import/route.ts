@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server";
 import { PDFParse } from "pdf-parse";
+import { formatResumeText, resumeTextToDocument } from "@/lib/resume/ats-format";
+import { normalizeResumeForATS } from "@/lib/ai/gateway";
 
 function toPlainText(value: string) {
-  return value.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim().slice(0, 50000);
-}
-
-function toDocument(text: string) {
-  const paragraphs = text.split(/\n{2,}|\r\n/).map((part) => part.trim()).filter(Boolean);
-  return {
-    type: "doc",
-    content: paragraphs.length ? paragraphs.map((part) => ({ type: "paragraph", content: [{ type: "text", text: part }] })) : [{ type: "paragraph" }],
-  };
+  return value.replace(/<script[\s\S]*?<\/script>/gi, "\n").replace(/<style[\s\S]*?<\/style>/gi, "\n").replace(/<\/?[^>]+>/g, "\n").replace(/&nbsp;/g, " ").trim();
 }
 
 export async function POST(request: Request) {
@@ -44,9 +38,15 @@ export async function POST(request: Request) {
       }
     }
 
-    text = text.trim().slice(0, 50000);
+    text = formatResumeText(text).slice(0, 30000);
     if (text.length < 20) return NextResponse.json({ error: "找不到足夠的履歷文字，請改用公開連結、PDF 或貼上完整內容" }, { status: 422 });
-    return NextResponse.json({ data: { name: sourceName, plainText: text, content: toDocument(text) } });
+    const normalized = await normalizeResumeForATS(text);
+    return NextResponse.json({ data: {
+      name: sourceName,
+      languageCode: normalized.languageCode,
+      plainText: normalized.text,
+      content: resumeTextToDocument(normalized.text),
+    } });
   } catch (error) {
     console.error("Resume import failed", error);
     return NextResponse.json({ error: "履歷解析失敗，請改用貼上文字再試一次" }, { status: 500 });

@@ -46,7 +46,7 @@ export function ResumeEditor({
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm sm:prose-base max-w-none focus:outline-none min-h-[500px] p-4",
+          "resume-paper__content prose prose-sm sm:prose-base max-w-none focus:outline-none min-h-[500px]",
       },
     },
     onUpdate: ({ editor }) => {
@@ -55,9 +55,11 @@ export function ResumeEditor({
   });
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="resume-paper-frame overflow-hidden">
       <EditorToolbar editor={editor} />
-      <EditorContent editor={editor} />
+      <div className="resume-paper">
+        <EditorContent editor={editor} />
+      </div>
     </Card>
   );
 }
@@ -75,13 +77,13 @@ function getDefaultResumeTemplate(): Record<string, unknown> {
         type: "paragraph",
         attrs: { textAlign: "center" },
         content: [
-          { type: "text", text: "📧 email@example.com | 📱 0912-345-678 | 📍 台北市" },
+          { type: "text", text: "email@example.com | 0912-345-678 | 台北市 | linkedin.com/in/yourname" },
         ],
       },
       {
         type: "heading",
         attrs: { level: 2 },
-        content: [{ type: "text", text: "個人簡介" }],
+        content: [{ type: "text", text: "專業摘要" }],
       },
       {
         type: "paragraph",
@@ -192,6 +194,15 @@ function getDefaultResumeTemplate(): Record<string, unknown> {
             ],
           },
         ],
+      },
+      {
+        type: "heading",
+        attrs: { level: 2 },
+        content: [{ type: "text", text: "證照" }],
+      },
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "證照名稱 | 發照機構 | 年份" }],
       },
     ],
   };

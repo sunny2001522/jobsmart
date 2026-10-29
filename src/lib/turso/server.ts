@@ -38,7 +38,7 @@ export async function ensureTursoSchema() {
     `CREATE INDEX IF NOT EXISTS idx_agent_runs_user_created ON agent_runs(user_id, created_at DESC)`,
     ...["profiles", "resumes", "job_applications", "interview_questions", "interview_answers", "value_rankings", "resume_versions", "version_job_resumes", "job_categories", "interview_experiences", "companies", "company_reviews", "linkedin_generations", "ai_usage_logs", "value_cards"].map((table) => `CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, user_id TEXT NOT NULL DEFAULT 'demo-user', status TEXT, category_id TEXT, display_order INTEGER DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, data_json TEXT NOT NULL DEFAULT '{}')`),
     `CREATE INDEX IF NOT EXISTS idx_jobsmart_user_table ON job_applications(user_id, updated_at DESC)`,
-    `CREATE TABLE IF NOT EXISTS linkedin_sync_settings (user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1, frequency TEXT NOT NULL DEFAULT 'daily', sync_profile INTEGER NOT NULL DEFAULT 1, sync_jobs INTEGER NOT NULL DEFAULT 1, next_run_at TEXT, updated_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS linkedin_sync_settings (user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1, frequency TEXT NOT NULL DEFAULT 'manual', sync_profile INTEGER NOT NULL DEFAULT 0, sync_jobs INTEGER NOT NULL DEFAULT 0, next_run_at TEXT, updated_at TEXT NOT NULL, sync_consent_version INTEGER NOT NULL DEFAULT 1)`,
     `CREATE TABLE IF NOT EXISTS auth_users (
       id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL DEFAULT '',
       password_hash TEXT NOT NULL, email_verified INTEGER NOT NULL DEFAULT 0,
@@ -65,6 +65,21 @@ export async function ensureTursoSchema() {
       account_label TEXT, scopes_json TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL,
       PRIMARY KEY (user_id, provider)
     )`,
+    `CREATE TABLE IF NOT EXISTS linkedin_companion_pairings (
+      code_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL, used_at TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS linkedin_companion_tokens (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL, last_used_at TEXT, revoked_at TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_linkedin_tokens_user ON linkedin_companion_tokens(user_id, revoked_at)`,
+    `CREATE TABLE IF NOT EXISTS linkedin_fill_tasks (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, application_id TEXT NOT NULL,
+      job_url TEXT NOT NULL, payload_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expires_at TEXT NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_linkedin_fill_tasks_user ON linkedin_fill_tasks(user_id, status, expires_at)`,
     `CREATE TABLE IF NOT EXISTS gmail_oauth_tokens (
       user_id TEXT PRIMARY KEY, access_token_encrypted TEXT, refresh_token_encrypted TEXT,
       token_expires_at TEXT, gmail_email TEXT, created_at TEXT, updated_at TEXT
@@ -80,6 +95,13 @@ export async function ensureTursoSchema() {
   // schema above. The repository now stores records in the shared JSON shape,
   // so add the shared columns lazily without destroying existing resumes.
   if (db) {
+    const linkedinSettingsColumns = await db.execute("PRAGMA table_info(linkedin_sync_settings)");
+    const existingLinkedInSettingsColumns = new Set(linkedinSettingsColumns.rows.map((row) => String(row.name)));
+    if (!existingLinkedInSettingsColumns.has("sync_consent_version")) {
+      await db.execute("ALTER TABLE linkedin_sync_settings ADD COLUMN sync_consent_version INTEGER NOT NULL DEFAULT 0");
+    }
+    await db.execute("UPDATE linkedin_sync_settings SET sync_profile = 0, sync_jobs = 0, sync_consent_version = 1 WHERE sync_consent_version < 1");
+
     const columns = await db.execute("PRAGMA table_info(resume_versions)");
     const existing = new Set(columns.rows.map((row) => String(row.name)));
     const migrations: string[] = [];
@@ -103,7 +125,7 @@ export async function recordAgentRun(input: {
   model: string;
   request: unknown;
   response: unknown;
-  userId?: string;
+  userId: string;
 }) {
   const db = getTursoClient();
   if (!db) return false;
@@ -111,17 +133,21 @@ export async function recordAgentRun(input: {
   await db.execute({
     sql: `INSERT INTO agent_runs (id, user_id, action, provider, model, input_json, output_json, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [crypto.randomUUID(), input.userId ?? "demo-user", input.action, input.provider, input.model,
+    args: [crypto.randomUUID(), input.userId, input.action, input.provider, input.model,
       JSON.stringify(input.request), JSON.stringify(input.response), new Date().toISOString()],
   });
   return true;
 }
 
-export async function getLatestLinkedInContext() {
+export async function getLatestLinkedInContext(userId: string) {
+  if (!userId) return null;
   const db = getTursoClient();
   if (!db) return null;
   await ensureTursoSchema();
-  const result = await db.execute("SELECT preferences_json FROM career_profiles WHERE user_id = 'demo-user' ORDER BY updated_at DESC LIMIT 1");
+  const result = await db.execute({
+    sql: "SELECT preferences_json FROM career_profiles WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1",
+    args: [userId],
+  });
   const value = result.rows[0]?.preferences_json;
   if (!value) return null;
   try { return JSON.parse(String(value)); } catch { return null; }

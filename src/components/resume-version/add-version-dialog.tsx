@@ -138,7 +138,7 @@ export function AddVersionDialog({ open, onOpenChange }: AddVersionDialogProps) 
   const copy = isEnglish
     ? {
         title: "Add or import resume",
-        description: "Paste, upload, or provide a URL and JobSmart will turn it into an editable version",
+        description: "Paste, upload, or provide a URL. JobSmart preserves the resume's original language and applies a clean ATS layout.",
         name: "Version name (optional)",
         namePlaceholder: "e.g. Frontend Engineer version",
         source: "Resume source",
@@ -146,7 +146,7 @@ export function AddVersionDialog({ open, onOpenChange }: AddVersionDialogProps) 
         file: "PDF / text file",
         url: "Resume URL",
         blank: "Blank template",
-        textPlaceholder: "Paste your resume text and AI will organize the sections and highlights...",
+        textPlaceholder: "Paste your resume text. AI will organize it in the same language using a standard ATS layout...",
         fileHint: "PDF, TXT, and Markdown are supported. The file is only used for parsing.",
         role: "Target role",
         rolePlaceholder: "e.g. Frontend Engineer",
@@ -158,7 +158,7 @@ export function AddVersionDialog({ open, onOpenChange }: AddVersionDialogProps) 
       }
     : {
         title: "新增或匯入履歷",
-        description: "貼上、上傳或提供連結，JobSmart 會整理成可編輯版本",
+        description: "貼上、上傳或提供連結，JobSmart 會保留原語言並整理成標準 ATS 單欄履歷",
         name: "版本名稱（可自動命名）",
         namePlaceholder: "例如：前端工程師版、設計師版",
         source: "履歷來源",
@@ -166,7 +166,7 @@ export function AddVersionDialog({ open, onOpenChange }: AddVersionDialogProps) 
         file: "PDF／文字檔",
         url: "履歷連結",
         blank: "空白模板",
-        textPlaceholder: "貼上你的履歷文字，AI 會幫你整理段落與重點...",
+        textPlaceholder: "貼上履歷文字，AI 會保留原語言並整理成標準 ATS 排版...",
         fileHint: "支援 PDF、TXT、Markdown，檔案只用於解析",
         role: "目標職位",
         rolePlaceholder: "例如：Frontend Engineer",
@@ -193,7 +193,7 @@ export function AddVersionDialog({ open, onOpenChange }: AddVersionDialogProps) 
 
     setIsSubmitting(true);
     try {
-      let imported = { name: "", plainText: "", content: DEFAULT_RESUME_TEMPLATE };
+      let imported = { name: "", plainText: "", languageCode: "zh-TW", content: DEFAULT_RESUME_TEMPLATE };
       if (source !== "blank") {
         const form = new FormData();
         form.set("source", source === "url" ? "url" : source === "file" ? "file" : "text");
@@ -214,6 +214,9 @@ export function AddVersionDialog({ open, onOpenChange }: AddVersionDialogProps) 
         target_role: targetRole.trim() || null,
         base_content: imported.content,
         base_plain_text: imported.plainText || null,
+        base_language: imported.languageCode,
+        active_language: imported.languageCode,
+        language_variants: [],
         base_ats_score: null,
         base_keywords: [],
         is_active: true,

@@ -49,9 +49,20 @@ function shouldShowReviewTitle(title: string | null | undefined): boolean {
   return Boolean(title && !/working at .*glassdoor|^glassdoor$/i.test(title.trim()));
 }
 
-function buildReviewSummary(reviews: CompanyReview[], isEnglish: boolean): string {
-  const sentences = reviews.flatMap((review) => cleanReviewContent(review.content).split(/(?<=[.!?。！？])\s+/)).map((sentence) => sentence.trim()).filter((sentence) => sentence.length >= 18).filter((sentence) => !/employee reviews|newsweek|avatar|www\./i.test(sentence));
-  return sentences.length ? sentences.slice(0, 2).join(" ") : (isEnglish ? "No clear review summary is available yet." : "目前還沒有足夠內容整理評論摘要。");
+type ReviewSummary = { positive: string[]; negative: string[]; neutral: string[] };
+
+function buildReviewSummary(reviews: CompanyReview[]): ReviewSummary {
+  const noise = /employee reviews|newsweek|avatar|www\.|linkedin|likes?|reactions?|followers?|funny picture|教育背景|零工作經驗|大學生|posted on/i;
+  const summary: ReviewSummary = { positive: [], negative: [], neutral: [] };
+  for (const review of reviews) {
+    const bucket = review.sentiment === "positive" ? "positive" : review.sentiment === "negative" ? "negative" : "neutral";
+    const sentence = cleanReviewContent(review.content)
+      .split(/(?<=[.!?。！？])\s+/)
+      .map((item) => item.trim())
+      .find((item) => item.length >= 24 && !noise.test(item));
+    if (sentence && summary[bucket].length < 2) summary[bucket].push(sentence);
+  }
+  return summary;
 }
 
 export function ReviewsSection({
@@ -315,7 +326,19 @@ export function ReviewsSection({
         <Card className="bg-muted/40">
           <CardContent className="p-3">
             <p className="mb-1 text-xs font-semibold">{isEnglish ? "AI review summary" : "AI 評論摘要"}</p>
-            <p className="text-sm leading-6 text-muted-foreground">{buildReviewSummary(visibleReviews, isEnglish)}</p>
+            {(() => {
+              const summary = buildReviewSummary(visibleReviews);
+              const groups = [
+                { label: isEnglish ? "Pros" : "優點", items: summary.positive, tone: "text-emerald-700 dark:text-emerald-400" },
+                { label: isEnglish ? "Cons" : "缺點", items: summary.negative, tone: "text-rose-700 dark:text-rose-400" },
+                { label: isEnglish ? "Other observations" : "其他觀察", items: summary.neutral, tone: "text-muted-foreground" },
+              ].filter((group) => group.items.length > 0);
+              return groups.length ? (
+                <div className="space-y-2 text-sm leading-6">
+                  {groups.map((group) => <div key={group.label}><p className={`text-xs font-medium ${group.tone}`}>{group.label}</p><ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">{group.items.map((item) => <li key={item}>{item}</li>)}</ul></div>)}
+                </div>
+              ) : <p className="text-sm leading-6 text-muted-foreground">{isEnglish ? "No reliable review evidence is available yet." : "目前沒有足夠可靠的評論證據可整理。"}</p>;
+            })()}
           </CardContent>
         </Card>
       )}

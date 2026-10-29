@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JobSmart - Smart Job Search Assistant",
+  title: "WiSEjOB - Smart Job Search Assistant",
   description: "AI-powered tools to tailor resumes, track applications, and prepare for interviews.",
   keywords: ["job search", "resume", "interview", "AI", "application tracker"],
 };

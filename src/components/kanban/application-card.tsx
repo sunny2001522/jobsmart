@@ -4,8 +4,9 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GripVertical, ExternalLink, Star, Heart, Check } from "lucide-react";
+import { GripVertical, ExternalLink, Heart, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCompanyTier, getCompanyTier } from "@/lib/company-tier";
 import type { JobApplication } from "@/types";
 import { useI18n } from "@/contexts/i18n-context";
 
@@ -55,8 +56,7 @@ export function ApplicationCard({
   const valueScore = rawValueScore == null
     ? null
     : Math.round(rawValueScore <= 10 ? rawValueScore * 10 : rawValueScore);
-  const companyScore = application.rating_happiness;
-  const scoreTone = companyScore == null ? "text-muted-foreground" : companyScore >= 7 ? "text-emerald-600" : companyScore >= 5 ? "text-amber-600" : "text-red-600";
+  const companyTier = getCompanyTier(application.company_name);
 
   const legacyLinkedInTitle = application.position.match(/^(.+?)\s+at\s+(.+?)(?:\s+[—|-].*)?$/i);
   const displayPosition = legacyLinkedInTitle && /linkedin\.com/i.test(application.company_name)
@@ -151,12 +151,9 @@ export function ApplicationCard({
                   </div>
                 )}
 
-                {/* 星星 = AI 公司評價；愛心 = 個人價值觀匹配 */}
+                {/* Company standing = tier; heart = personal values match. */}
                 <div className="flex items-center gap-3">
-                  <Star className={cn("h-3 w-3 fill-current", scoreTone)} />
-                  <span className={cn("text-xs", scoreTone)}>
-                    {companyScore == null ? "—" : `${companyScore}/10`}
-                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">{formatCompanyTier(companyTier.tier)}</span>
                   <Heart className="h-3 w-3 fill-rose-400 text-rose-400" />
                   <span className="text-xs text-muted-foreground">{valueScore == null ? "—" : `${valueScore}/100`}</span>
                 </div>

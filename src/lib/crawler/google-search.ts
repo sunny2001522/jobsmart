@@ -21,15 +21,23 @@ export interface MediumArticle {
 
 const GOOGLE_SEARCH_API = "https://www.googleapis.com/customsearch/v1";
 
+export function hasGoogleSearchCredentials() {
+  return Boolean(
+    (process.env.GOOGLE_SEARCH_API_KEY || process.env.GOOGLE_API_KEY)
+    && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID),
+  );
+}
+
 // 使用 Google Custom Search 搜尋
 export async function searchGoogle(
   query: string,
   options?: {
     site?: string;
     limit?: number;
+    throwOnError?: boolean;
   }
 ): Promise<GoogleSearchResult[]> {
-  const { site, limit = 10 } = options ?? {};
+  const { site, limit = 10, throwOnError = false } = options ?? {};
 
   const apiKey = process.env.GOOGLE_SEARCH_API_KEY || process.env.GOOGLE_API_KEY;
   const engineId = process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID;
@@ -53,10 +61,11 @@ export async function searchGoogle(
       num: String(Math.min(limit, 10)), // Google API 最多一次 10 筆
     });
 
-    const response = await fetch(`${GOOGLE_SEARCH_API}?${params}`);
+    const response = await fetch(`${GOOGLE_SEARCH_API}?${params}`, { signal: AbortSignal.timeout(8000) });
 
     if (!response.ok) {
       console.error(`Google Search API error: ${response.status}`);
+      if (throwOnError) throw new Error(`Google Custom Search 回應錯誤（HTTP ${response.status}）`);
       return [];
     }
 
@@ -74,6 +83,7 @@ export async function searchGoogle(
     }));
   } catch (error) {
     console.error("Google Search error:", error);
+    if (throwOnError) throw error;
     return [];
   }
 }

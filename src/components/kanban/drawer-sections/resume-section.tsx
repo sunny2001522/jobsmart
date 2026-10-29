@@ -145,12 +145,12 @@ export function ResumeSection({
       ) : null}
 
       <Card>
-        <CardHeader className="p-3 pb-2"><CardTitle className="text-sm">{text("延伸問題：補充真實經驗", "Follow-up questions")}</CardTitle></CardHeader>
+        <CardHeader className="p-3 pb-2"><CardTitle className="text-sm">{text("延伸問題：只補充履歷未寫清楚的證據", "Follow-up questions: add only missing evidence")}</CardTitle></CardHeader>
         <CardContent className="space-y-3 p-3 pt-0">
-          {["你有哪些與這份 JD 最相關的成果？", "你是否使用過 JD 提到的工具或方法？請描述實際情境。", "還有哪項經驗可以證明你適合這個職位？"].map((question, index) => (
+          {["履歷已列出相關成果。哪一項最能對應這份 JD？請只補充履歷未寫出的具體角色、執行規模與可量化結果；若已寫清楚可略過。", "履歷已列出相關工具或方法。請只補充履歷未寫出的實際使用情境：你解決了什麼問題、做了哪個關鍵決策、結果如何；若已充分說明可略過。", "請找出 JD 中履歷尚未明確證明的一項要求，提供一個新的真實例子（情境、行動、結果）；若沒有缺口可略過。"].map((question, index) => (
             <div key={question} className="space-y-1.5">
-              <label className="text-xs font-medium">{text(question, ["What result from your experience is most relevant to this JD?", "Have you used any tools or methods mentioned in the JD? Describe the real context.", "What other experience proves you are a fit for this role?"][index])}</label>
-              <Textarea value={answers[index]} onChange={(event) => setAnswers((current) => current.map((answer, answerIndex) => answerIndex === index ? event.target.value : answer))} rows={3} placeholder={text("請只填寫真實經驗與可佐證的成果", "Only include real, verifiable experience")} />
+              <label className="text-xs font-medium">{text(question, ["Your resume already lists relevant results. Which one best maps to this JD? Add only the specific role, scale, and measurable outcome missing from your resume; skip if it is already clear.", "Your resume already lists relevant tools or methods. Add only the missing real-world context: what problem you solved, which key decision you made, and what changed; skip if already covered.", "Which JD requirement is not yet clearly evidenced in your resume? Give one new, real example (situation, action, result); skip if there is no gap."][index])}</label>
+              <Textarea value={answers[index]} onChange={(event) => setAnswers((current) => current.map((answer, answerIndex) => answerIndex === index ? event.target.value : answer))} rows={3} placeholder={text("若履歷已寫清楚可留白；只填新的、真實且可佐證的資訊", "Leave blank if your resume already covers it. Add only new, real, verifiable information.")} />
             </div>
           ))}
           <Button variant="secondary" className="w-full" disabled={!answers.some((answer) => answer.trim()) || isStrengthening} onClick={() => void handleStrengthen()}>

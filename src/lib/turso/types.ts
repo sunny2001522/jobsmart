@@ -42,6 +42,8 @@ export interface Profile {
   id: string;
   email: string;
   name: string | null;
+  phone?: string | null;
+  linkedin_url?: string | null;
   avatar_url: string | null;
   subscription_tier: SubscriptionTier;
   ai_credits_remaining: number;
@@ -176,6 +178,11 @@ export interface InterviewQuestion {
   difficulty: Difficulty | null;
   is_public: boolean;
   usage_count: number;
+  locale?: "en" | "zh-TW";
+  company_name?: string | null;
+  origin?: "company_review" | "resume_followup" | "custom" | "default";
+  evidence?: Array<{ reviewId: string; quote: string }>;
+  source_urls?: string[];
   created_at: string;
 }
 
@@ -257,6 +264,21 @@ export type ValueRankingUpdate = Partial<Omit<ValueRanking, "id" | "user_id" | "
 
 export type GenerationStatus = "pending" | "generating" | "completed" | "failed";
 
+export interface ResumeLanguageVariant {
+  language_code: string;
+  content: Record<string, unknown>;
+  plain_text: string;
+  updated_at?: string;
+}
+
+export interface CustomizedResumeLanguageVariant {
+  language_code: string;
+  customized_plain_text: string;
+  jd_highlight_phrases: string[];
+  ats_score?: number;
+  matched_keywords?: string[];
+}
+
 // 履歷版本
 export interface ResumeVersion {
   id: string;
@@ -266,6 +288,9 @@ export interface ResumeVersion {
   target_role: string | null;
   base_content: Record<string, unknown>;  // TipTap JSON
   base_plain_text: string | null;
+  base_language?: string;
+  active_language?: string;
+  language_variants?: ResumeLanguageVariant[];
   base_ats_score: number | null;
   base_keywords: string[];
   is_active: boolean;
@@ -283,6 +308,9 @@ export interface VersionJobResume {
   job_application_id: string;
   customized_content: Record<string, unknown> | null;
   customized_plain_text: string | null;
+  customized_language_code?: string;
+  customized_variants?: CustomizedResumeLanguageVariant[];
+  jd_highlight_phrases?: string[];
   generation_status: GenerationStatus;
   generated_at: string | null;
   ats_score: number | null;

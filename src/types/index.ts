@@ -208,6 +208,11 @@ export interface InterviewQuestion {
   difficulty: 'easy' | 'medium' | 'hard' | null;
   is_public: boolean;
   usage_count: number;
+  locale?: "en" | "zh-TW";
+  company_name?: string | null;
+  origin?: "company_review" | "resume_followup" | "custom" | "default";
+  evidence?: Array<{ reviewId: string; quote: string }>;
+  source_urls?: string[];
   created_at: string;
 }
 
@@ -328,6 +333,14 @@ export interface ResumeVersion {
   target_role: string | null;
   base_content: Record<string, unknown>;  // TipTap JSON
   base_plain_text: string | null;
+  base_language?: string;
+  active_language?: string;
+  language_variants?: Array<{
+    language_code: string;
+    content: Record<string, unknown>;
+    plain_text: string;
+    updated_at?: string;
+  }>;
   base_ats_score: number | null;
   base_keywords: string[];
   is_active: boolean;
@@ -344,6 +357,15 @@ export interface VersionJobResume {
   job_application_id: string;
   customized_content: Record<string, unknown> | null;
   customized_plain_text: string | null;
+  customized_language_code?: string;
+  customized_variants?: Array<{
+    language_code: string;
+    customized_plain_text: string;
+    jd_highlight_phrases: string[];
+    ats_score?: number;
+    matched_keywords?: string[];
+  }>;
+  jd_highlight_phrases?: string[];
   generation_status: GenerationStatus;
   generated_at: string | null;
   ats_score: number | null;

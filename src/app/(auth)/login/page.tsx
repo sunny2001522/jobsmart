@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Skeleton } from "@/components/ui/skeleton";
 import { localizedToast as toast } from "@/lib/i18n/toast";
 import { useI18n } from "@/contexts/i18n-context";
+import { BrandLogo } from "@/components/brand-logo";
 
 function LoginForm() {
   const { locale, t } = useI18n();
@@ -69,11 +70,8 @@ function LoginForm() {
   return (
     <Card className="w-full max-w-md mx-4">
       <CardHeader className="text-center">
-        <Link href="/" className="flex items-center justify-center gap-2 mb-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-            J
-          </div>
-          <span className="font-semibold text-lg">JobSmart</span>
+        <Link href="/" aria-label="WiSEjOB" className="mb-4 flex items-center justify-center">
+          <BrandLogo />
         </Link>
         <CardTitle>{t("auth.login")}</CardTitle>
         <CardDescription>

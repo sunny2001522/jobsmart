@@ -16,15 +16,14 @@ export interface CopilotInput {
 }
 
 export interface CopilotResult {
-  provider: "nebius-token-factory" | "demo-fallback";
+  provider: "nebius-token-factory" | "gemini" | "openai" | "demo-fallback";
   model: string;
   summary: string;
   nextSteps: string[];
   evidence: string[];
 }
 
-const MODEL = process.env.NEBIUS_MODEL ?? "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
-const BASE_URL = process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1";
+import { callConfiguredChat, getAIProviderConfig } from "./provider";
 
 function demoResult(action: CopilotAction, locale: "zh-TW" | "en"): CopilotResult {
   const results: Record<CopilotAction, CopilotResult> = {
@@ -94,9 +93,8 @@ function demoResult(action: CopilotAction, locale: "zh-TW" | "en"): CopilotResul
 }
 
 export async function runNebiusCopilot(input: CopilotInput): Promise<CopilotResult> {
-  const key = process.env.NEBIUS_API_KEY;
   const locale = input.locale ?? "zh-TW";
-  if (!key) return demoResult(input.action, locale);
+  if (!getAIProviderConfig().apiKey) return demoResult(input.action, locale);
 
   const prompt = [
     "You are JobSmart Copilot, a careful career agent.",
@@ -108,14 +106,11 @@ export async function runNebiusCopilot(input: CopilotInput): Promise<CopilotResu
     input.transcript ? `Interview transcript: ${input.transcript}` : "",
   ].filter(Boolean).join("\n");
 
-  const response = await fetch(`${BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: MODEL, temperature: 0.2, messages: [{ role: "user", content: prompt }] }),
-  });
-  if (!response.ok) throw new Error(`Nebius inference failed (${response.status})`);
-  const body = await response.json();
-  const raw = body.choices?.[0]?.message?.content ?? "";
-  const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ""));
-  return { provider: "nebius-token-factory", model: MODEL, ...parsed };
+  const result = await callConfiguredChat(prompt, { temperature: 0.2 });
+  const parsed = JSON.parse(result.text.replace(/^```json\s*|\s*```$/g, ""));
+  return {
+    provider: result.provider === "nebius" ? "nebius-token-factory" : result.provider,
+    model: result.model,
+    ...parsed,
+  };
 }

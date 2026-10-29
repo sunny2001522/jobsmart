@@ -20,6 +20,38 @@ export interface ValueMatchResult {
   confidence: "high" | "medium" | "low";
 }
 
+export type ManualVerdicts = Partial<Record<string, "positive" | "negative" | "neutral" | "unknown">>;
+
+/**
+ * Calculate the overall match from available factors only. Higher-ranked
+ * preferences have more weight; unknown factors are excluded from the
+ * denominator so missing data cannot drag the score down.
+ */
+export function calculateWeightedMatchScore(
+  breakdown: ScoreBreakdown[],
+  manualVerdicts: ManualVerdicts = {}
+) {
+  const available = breakdown
+    .map((item) => {
+      const manual = manualVerdicts[item.valueId];
+      if (manual === "unknown") return null;
+      if (manual === "positive") return { item, value: 100 };
+      if (manual === "neutral") return { item, value: 50 };
+      if (manual === "negative") return { item, value: 0 };
+      if (item.quality === "unknown") return null;
+      return { item, value: item.isMatched ? 100 : 0 };
+    })
+    .filter((entry): entry is { item: ScoreBreakdown; value: number } => Boolean(entry));
+
+  if (available.length === 0) return 0;
+  const totalWeight = available.reduce((sum, { item }) => sum + Math.max(1, 21 - item.userPriority), 0);
+  const weightedTotal = available.reduce(
+    (sum, { item, value }) => sum + value * Math.max(1, 21 - item.userPriority),
+    0,
+  );
+  return Math.round(weightedTotal / totalWeight);
+}
+
 interface ValueMention {
   count: number;
   positiveCount: number;
@@ -106,14 +138,15 @@ function extractValueMentions(reviews: CompanyReview[], jdText = ""): Map<string
 }
 
 /**
- * Score all ranked factors. Evidence scores occupy 0–80; the user's rank adds
- * 20 points for first place down to 1 for twentieth. With no evidence, the
- * factor still receives its rank bonus and remains marked as unknown.
+ * Score all ranked factors. The overall score is weighted by preference rank
+ * and only uses factors with evidence; unknown factors remain visible but do
+ * not affect the result.
  */
 export function calculateValueMatch(
   userRanking: string[],
   reviews: CompanyReview[],
-  jdText = ""
+  jdText = "",
+  manualVerdicts: ManualVerdicts = {}
 ): ValueMatchResult {
   const ranking = getCompleteValueRanking(userRanking);
   const valueMentions = extractValueMentions(reviews, jdText);
@@ -133,8 +166,7 @@ export function calculateValueMatch(
       : mention.sentimentScore >= 0.75
         ? "good"
         : isMatched ? "okay" : "bad";
-    const evidenceScore = hasEvidence ? Math.round(mention.sentimentScore * 80) : 0;
-    const score = evidenceScore + priorityBonus;
+    const score = hasEvidence ? (isMatched ? 100 : 0) : 0;
 
     breakdown.push({
       valueId,
@@ -153,10 +185,7 @@ export function calculateValueMatch(
     });
   });
 
-  const averageScore = breakdown.length > 0
-    ? Math.round(breakdown.reduce((total, item) => total + item.score, 0) / breakdown.length)
-    : 0;
-  const matchScore = averageScore;
+  const matchScore = calculateWeightedMatchScore(breakdown, manualVerdicts);
   const confidence: "high" | "medium" | "low" =
     reviews.length >= 10 ? "high" : reviews.length >= 5 ? "medium" : "low";
 

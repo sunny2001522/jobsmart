@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { customizeResume } from "@/lib/ai/gateway";
-import { generateCoverLetter } from "@/lib/ai/cover-letter";
+import { getLocalUser } from "@/lib/auth/local";
+import { generateApplicationPackage } from "@/lib/automation/prepare-application";
 import { dispatch } from "@/lib/turso/repository";
 import { ensureTursoSchema, getTursoClient } from "@/lib/turso/server";
 
@@ -17,6 +17,8 @@ function extractJd(application: Record<string, unknown>) {
 }
 
 export async function POST(request: Request) {
+  const user = await getLocalUser();
+  if (!user) return NextResponse.json({ error: "請先登入" }, { status: 401 });
   const db = getTursoClient();
   if (!db) return NextResponse.json({ error: "Turso is not configured" }, { status: 503 });
   await ensureTursoSchema();
@@ -33,6 +35,7 @@ export async function POST(request: Request) {
     if (!application) return NextResponse.json({ error: "找不到這個職缺" }, { status: 404 });
     const version = await dispatch("getResumeVersion", [versionId]) as Record<string, unknown> | null;
     if (!version?.base_plain_text || !String(version.base_plain_text).trim()) return NextResponse.json({ error: "原始履歷沒有文字內容，請先完成履歷" }, { status: 400 });
+    const profile = await dispatch("getProfile") as Record<string, unknown> | null;
     const jd = String(body.jdContent || extractJd(application)).trim();
     if (jd.length < 20) return NextResponse.json({ error: "找不到完整 JD，請先開啟職缺詳情並取得 JD" }, { status: 400 });
 
@@ -46,16 +49,15 @@ export async function POST(request: Request) {
     recoveryRelationId = String(relation.id);
     await dispatch("updateVersionJobResume", [recoveryRelationId, { generation_status: "generating" }]);
 
-    const tailored = await customizeResume(String(version.base_plain_text), jd, String(application.company_name), String(application.position));
-    await dispatch("updateResumeVersion", [versionId, { base_ats_score: tailored.baseAtsScore }]);
-    const coverLetter = await generateCoverLetter({
+    const { tailored, coverLetter } = await generateApplicationPackage({
+      resumeText: String(version.base_plain_text),
+      jobDescription: jd,
       companyName: String(application.company_name),
       position: String(application.position),
-      jobDescription: jd,
-      resumePlainText: tailored.customizedContent,
-      applicantName: String((version as Record<string, unknown>).name || ""),
-      contactEmail: String(application.contact_email || ""),
+      applicantName: String(profile?.name || user.displayName),
+      contactEmail: String(application.contact_email || user.email),
     });
+    await dispatch("updateResumeVersion", [versionId, { base_ats_score: tailored.baseAtsScore }]);
     const saved = await dispatch("updateVersionJobResume", [recoveryRelationId, {
       customized_plain_text: tailored.customizedContent,
       ats_score: tailored.atsScore,
@@ -71,6 +73,7 @@ export async function POST(request: Request) {
       resume_status: "needs_review",
       resume_version_id: versionId,
       cover_letter: coverLetter,
+      cover_letter_status: "needs_review",
     }]);
     return NextResponse.json({ data: { application: savedApplication, applicationId, versionId, versionName: version.name, relationId: recoveryRelationId, jdContent: jd, coverLetter, ...tailored } });
   } catch (error) {

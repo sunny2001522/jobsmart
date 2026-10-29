@@ -29,9 +29,35 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/contexts/i18n-context";
+import type { ReactNode } from "react";
 
 interface EditorToolbarProps {
   editor: Editor | null;
+}
+
+function ToolbarButton({
+  onClick,
+  isActive,
+  children,
+  title,
+}: {
+  onClick: () => void;
+  isActive?: boolean;
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+      className={cn("h-8 w-8 p-0", isActive && "bg-muted")}
+      title={title}
+    >
+      {children}
+    </Button>
+  );
 }
 
 export function EditorToolbar({ editor }: EditorToolbarProps) {
@@ -54,32 +80,6 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
     setLinkDialogOpen(false);
   };
-
-  const ToolbarButton = ({
-    onClick,
-    isActive,
-    children,
-    title,
-  }: {
-    onClick: () => void;
-    isActive?: boolean;
-    children: React.ReactNode;
-    title: string;
-  }) => (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={onClick}
-      className={cn(
-        "h-8 w-8 p-0",
-        isActive && "bg-muted"
-      )}
-      title={title}
-    >
-      {children}
-    </Button>
-  );
 
   return (
     <>

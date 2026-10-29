@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/contexts/i18n-context";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { BrandLogo } from "@/components/brand-logo";
 import type { MessageKey } from "@/lib/i18n/messages";
 
 const features = [
@@ -53,12 +54,9 @@ export default function LandingPage() {
       {/* Header */}
       <header className="border-b">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-              J
-            </div>
-            <span className="font-semibold text-lg">JobSmart</span>
-          </div>
+          <Link href="/" aria-label="WiSEjOB" className="flex items-center">
+            <BrandLogo priority />
+          </Link>
           <div className="flex items-center gap-3">
             <LanguageSwitcher className="w-[42px] px-2 sm:w-[118px] sm:px-3" compactOnMobile />
             <Button variant="ghost" asChild>
@@ -140,7 +138,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© 2024 JobSmart. All rights reserved.</p>
+          <p>© 2024 WiSEjOB. All rights reserved.</p>
         </div>
       </footer>
     </div>

@@ -17,6 +17,24 @@ NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1
 NEBIUS_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
 ```
 
+## Switching providers or models
+
+All server-side text generation uses the shared model gateway. The default
+provider is Nebius, so the variables above continue to work unchanged. To use
+Gemini or OpenAI, set these server-side variables and restart the backend.
+
+```text
+AI_PROVIDER=gemini       # nebius | gemini | openai
+AI_API_KEY=<provider key>
+AI_MODEL=gemini-2.5-flash
+```
+
+For Gemini, the existing `GOOGLE_AI_API_KEY` and optional
+`GOOGLE_AI_MODEL` variables are supported. For OpenAI, the existing
+`OPENAI_API_KEY` and optional `OPENAI_MODEL` variables are supported.
+`AI_*` takes precedence when set; when `AI_PROVIDER` is omitted, the existing
+Nebius configuration is used.
+
 ## Container
 
 ```bash
