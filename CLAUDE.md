@@ -80,3 +80,7 @@ service-account.json
 3. 是否有憑證檔案（.pem, .key, .json credentials）
 
 如發現上述檔案，自動加入 `.gitignore` 並提醒用戶。
+
+## 評審示範帳號（已建立，勿重複建立）
+
+線上網站已有評審示範帳號 `judge.demo@jobsmart.example` 和一組「Demo」分類示範資料（2026-10-29 建立）。**不要再建立新的示範帳號、示範履歷或示範職缺，也不要刪除 Demo 分類的資料。** 詳細內容、ID 和待處理事項見 [`docs/JUDGE_DEMO.md`](docs/JUDGE_DEMO.md)。密碼不放在 repo。
