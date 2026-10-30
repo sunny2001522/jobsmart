@@ -10,16 +10,17 @@
 
 ## 線上已建立的示範資料
 
-所有帳號共用同一份資料（`src/lib/turso/repository.ts` 的 `userId()` 固定回傳 `demo-user`），所以下面這些資料任何帳號登入都看得到。
+從 `9e8e475` 起資料依登入帳號分開（`src/lib/turso/repository.ts` 的 `userId()` 回傳登入者 ID），所以下面這些資料**只屬於評審帳號**，用評審帳號登入才看得到。2026-10-30 已在評審帳號底下重新建立。
 
 | 項目 | 內容 | ID |
 |---|---|---|
-| 職缺分類 | `Demo` | `7dc8aaa5-1283-475e-b17a-041149411d86` |
-| 示範履歷 | `Demo · Alex Lin (PM)`（虛構人物，`display_order = -1`，是「準備履歷」的預設履歷） | `122958e7-818c-4fca-84a5-371d487589d0` |
+| 職缺分類 | `Demo` | `6e1202e8-2165-40d7-b741-9b8fc07b1c9c` |
+| 示範履歷 | `Demo · Alex Lin (PM)`（虛構人物） | `a31db432-eea7-4bd6-b6ad-1e284621aacc` |
 | 示範職缺 | Lumora AI、Kitebank（Saved）、Northwind Logistics（Preparing）、Formosa Health Tech（Applied）、Pixelpine Games（Round 1）、Harborline Travel（Verbal offer），皆為虛構公司 | 分類為 `Demo` |
 
 - 示範履歷刻意寫成「Assisted the product manager…」，而 Lumora AI 的 JD 要求「Led the end-to-end launch」，用來展示事實審核會標出誇大的句子。
-- 請不要刪除或修改上述資料；隊員原本的卡片沒有被動到。
+- 請不要刪除或修改上述資料。
+- 2026-10-29 第一次建立的同名資料屬於舊的共用 `demo-user`，現在一般帳號看不到，可以忽略。
 
 ## 評審試用路徑
 
@@ -27,5 +28,5 @@
 
 ## 待處理
 
-- [ ] **wisejob 的 Vercel 尚未設定 `NEBIUS_API_KEY`**，目前所有 AI 功能都會失敗（`NEBIUS_API_KEY is not set`），上面的試用路徑走不通。設定後請重新部署。
+- [ ] **wisejob 的 Vercel 尚未設定 AI 金鑰**（2026-10-30 確認 `/api/agent/run` 回傳 `provider: demo-fallback`）。請設定 `NEBIUS_API_KEY`（或 `AI_PROVIDER` + `AI_API_KEY`）後重新部署，否則上面的試用路徑走不通。
 - [ ] Devpost 的事實審核截圖要等金鑰設定好才能補拍。
